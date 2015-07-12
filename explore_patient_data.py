@@ -5,9 +5,12 @@ from sklearn.ensemble import ExtraTreesClassifier
 from sklearn import svm
 from sklearn.metrics import confusion_matrix
 import time
+import datetime as dt
 import matplotlib.pyplot as plt
 import sys
 import os.path
+import cPickle as pickle
+import re
 
 def plot_cm(cm, title='Confusion matrix', cmap=plt.cm.Blues):
     plt.imshow(cm, interpolation='nearest', cmap=cmap)
@@ -48,7 +51,7 @@ def plot_all_scatter_matrices(xx, yy):
         y = yy
         plot_scatter_matrix(x,y,fname=os.path.join('plots', 'scatter_matrix_%s.png' % modalities[i]))
 
-def plot_predictions(coord, dim, pred, gt, fname=None):
+def plot_predictions(coord, dim, pred, gt, fname=None, fpickle=None):
     assert coord.shape[0] == len(pred), "Number of coordinates must match to the number of labels (%d != %d)" % (coord.shape[0], len(pred))
     print "Plotting predictions..."
     D = np.ones((dim[0], dim[1], dim[2])) * -1
@@ -58,10 +61,10 @@ def plot_predictions(coord, dim, pred, gt, fname=None):
     for i in range(coord.shape[0]):
         Dgt[coord[i,0], coord[i,1], coord[i,2]] = gt[i]
 
-    n_layers = 5
+    n_layers = 7
     zs = np.linspace(0, dim[2], n_layers+4)
     zs = map(int, zs[2:-2])
-    plt.figure(2, figsize=(20,10))
+    plt.figure(2, figsize=(n_layers*4,10))
     from matplotlib import colors
     cmap = colors.ListedColormap(['white', 'orange', 'red', 'blue', 'green', 'black'])
     bounds = range(-1,6)
@@ -77,6 +80,9 @@ def plot_predictions(coord, dim, pred, gt, fname=None):
         plt.show()
     else:
         plt.savefig(fname)
+    if fpickle is not None:
+        with open(fpickle, 'wb') as fp:
+            pickle.dump(D, fp)
 
 def save_predictions(coord, dim, pred, gt, fname='pred.csv'):
     print 'Writing predictions to %s...' % fname
@@ -191,16 +197,19 @@ def dice_scores(y, ypred, patient_idxs=None, label='Dice scores:'):
     ds_std = np.std(ds,0)
     ds_min = np.min(ds,0)
     ds_max = np.max(ds,0)
-    print "\n%s" % label
-    print "              \tMean\tStd\tMin\tMax"
-    print "Whole tumor:\t%.4f\t%.4f\t%.4f\t%.4f" % (ds_mean[0], ds_std[0], ds_min[0], ds_max[0])
-    print "Tumor core:\t%.4f\t%.4f\t%.4f\t%.4f" % (ds_mean[1], ds_std[1], ds_min[1], ds_max[1])
-    print "Active tumor:\t%.4f\t%.4f\t%.4f\t%.4f" % (ds_mean[2], ds_std[2], ds_min[2], ds_max[2])
+    scores_str = ""
+    scores_str += "\n%s\n" % label
+    scores_str += "             \tMean\tStd\tMin\tMax\n"
+    scores_str += "Whole tumor: \t%.4f\t%.4f\t%.4f\t%.4f\n" % (ds_mean[0], ds_std[0], ds_min[0], ds_max[0])
+    scores_str += "Tumor core:  \t%.4f\t%.4f\t%.4f\t%.4f\n" % (ds_mean[1], ds_std[1], ds_min[1], ds_max[1])
+    scores_str += "Active tumor:\t%.4f\t%.4f\t%.4f\t%.4f\n" % (ds_mean[2], ds_std[2], ds_min[2], ds_max[2])
+    print scores_str
+    fscores.write(scores_str)
 
 def train_model(xtr, ytr, n_trees=10):
     # Train classifier
     t0 = time.time()
-    model = RandomForestClassifier(n_trees, oob_score=True, verbose=1, n_jobs=3)
+    model = RandomForestClassifier(n_trees, oob_score=True, verbose=1, n_jobs=25)
     #model = ExtraTreesClassifier(n_trees, verbose=1, n_jobs=4)
     #model = svm.SVC(C=1000)
     model.fit(xtr, ytr)
@@ -213,7 +222,8 @@ def train_model(xtr, ytr, n_trees=10):
 
 def predict_and_evaluate(model, xte, yte=None, coord=None, dim=None,
                          pred_fname=None, plot_confmat=False, ret_probs=False,
-                         patient_idxs=None, pred_img_fname='slices.png'):
+                         patient_idxs=None, pred_img_fname='slices.png',
+                         pred_3D_fname=None):
 
     # Predict and evaluate
     if not ret_probs:
@@ -236,9 +246,9 @@ def predict_and_evaluate(model, xte, yte=None, coord=None, dim=None,
 
         if coord is not None and dim is not None:
             # Plot the first patient
-            plot_predictions(coord[:patient_idxs[1]], dim[0], pred[:patient_idxs[1]], yte[:patient_idxs[1]], pred_img_fname)
+            plot_predictions(coord[:patient_idxs[1]], dim[0], pred[:patient_idxs[1]], yte[:patient_idxs[1]], pred_img_fname, pred_3D_fname)
         if pred_fname is not None:
-            save_predictions(coord, dim[0], pred, yte, os.path.join('predictions', 'pred_patient%d.csv' % test_patients[0]))
+            save_predictions(coord, dim[0], pred, yte, pred_fname)
 
         if plot_confmat:
             plt.figure()
@@ -251,11 +261,15 @@ def predict_and_evaluate(model, xte, yte=None, coord=None, dim=None,
         return pred
 
 def main():
-    np.random.seed(133742)
+    global fscores
+    fscores = open("results_%s.txt" % re.sub('[ :]','',str(dt.datetime.now())[:-7]), 'w')
+    
+    np.random.seed(9823411)#133742)
 
-    patients = np.random.permutation(40) + 1
-    n_tr_p = 1 # Train patients
-    n_de_p = 1 # Development patients
+    t_beg = time.time()
+    patients = np.random.permutation(193) + 1
+    n_tr_p = 10 # Train patients
+    n_de_p = 0 # Development patients
     n_te_p = 1 # Test patients
     assert n_tr_p + n_de_p + n_te_p < len(patients), \
             "Not enough patients available"
@@ -270,7 +284,7 @@ def main():
     dims_tr = []
     print "Train users:"
     for tr_pat in train_patients:
-        x, y, coord, dim = load_patient(tr_pat, n_voxels=None)
+        x, y, coord, dim = load_patient(tr_pat, n_voxels=10000)
         ytr = np.concatenate((ytr, y))
         if xtr.shape[0] == 0:
             xtr = x
@@ -319,7 +333,13 @@ def main():
         dims_de.append(dim)
 
     model = train_model(xtr, ytr, n_trees=10)
-    #pred = predict_and_evaluate(model, xte, yte, plot_pred=False, pred_fname=None, plot_confmat=False, ret_probs=False, patient_idxs=patient_idxs_te)
+    pred = predict_and_evaluate(
+            model, xte, yte, coord=coordte, dim=dims_te,
+            pred_fname=os.path.join('predictions', 'pat%d_pred.csv' % test_patients[0]),
+            patient_idxs=patient_idxs_te,
+            pred_img_fname=os.path.join('plots', 'pat%d_slices_0.png' % test_patients[0]),
+            pred_3D_fname=os.path.join('plots', 'pat%d_3D.pckl' % test_patients[0]))
+    '''
     pred_probs_de = predict_and_evaluate(model, xde, yde, plot_confmat=False, ret_probs=True, patient_idxs=patient_idxs_de)
     xlabel = extract_label_features(coordde, dims_de, pred_probs_de, patient_idxs_de)
     smoothed_pred = np.argmax(xlabel, axis=1)
@@ -333,17 +353,23 @@ def main():
 
     pred_probs_te = predict_and_evaluate(
             model, xte, yte, coord=coordte, dim=dims_te, plot_confmat=False,
-            ret_probs=True, patient_idxs=patient_idxs_te, pred_img_fname=os.path.join('plots', 'pat%d_slices_0.png' % test_patients[0]))
-    for i in range(5):
-        xlabel_te = extract_label_features(coordte, dims_te, pred_probs_te, patient_idxs_te)
+            ret_probs=True, patient_idxs=patient_idxs_te,
+            pred_img_fname=os.path.join('plots', 'pat%d_slices_0.png' % test_patients[0]))
+    for i in range(1):
+        xlabel_te = extract_label_features(coordte, dims_te, pred_probs_te,
+                                           patient_idxs_te)
         smoothed_pred = np.argmax(xlabel_te, axis=1)
-        dice_scores(yte, smoothed_pred, patient_idxs=patient_idxs_te, label='Test smoothed dice scores:')
+        dice_scores(yte, smoothed_pred, patient_idxs=patient_idxs_te,
+                    label='Test smoothed dice scores (iteration %d):' % (i+1))
 
         xte2 = np.hstack((xte, xlabel_te))
         pred_probs_te = predict_and_evaluate(
                 model2, xte2, yte, coord=coordte, dim=dims_te, pred_fname=None,
                 plot_confmat=False, ret_probs=True, patient_idxs=patient_idxs_te,
                 pred_img_fname=os.path.join('plots', 'pat%d_slices_%d.png' % (test_patients[0], i+1)))
+    '''
+    print "Total time: %.2f seconds." % (time.time()-t_beg)
+    fscores.close()
 
 if __name__ == "__main__":
     main()
