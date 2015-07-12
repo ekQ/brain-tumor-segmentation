@@ -4,6 +4,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.ensemble import ExtraTreesClassifier
 from sklearn import svm
 from sklearn.metrics import confusion_matrix
+import skimage.morphology
 import time
 import datetime as dt
 import matplotlib.pyplot as plt
@@ -11,6 +12,23 @@ import sys
 import os.path
 import cPickle as pickle
 import re
+import code
+
+def keyboard(banner=None):
+    ''' Function that mimics the matlab keyboard command '''
+    # use exception trick to pick up the current frame
+    try:
+        raise None
+    except:
+        frame = sys.exc_info()[2].tb_frame.f_back
+    print "# Use quit() to exit :) Happy debugging!"
+    # evaluate commands in current namespace
+    namespace = frame.f_globals.copy()
+    namespace.update(frame.f_locals)
+    try:
+        code.interact(banner=banner, local=namespace)
+    except SystemExit:
+        return 
 
 def plot_cm(cm, title='Confusion matrix', cmap=plt.cm.Blues):
     plt.imshow(cm, interpolation='nearest', cmap=cmap)
@@ -51,7 +69,7 @@ def plot_all_scatter_matrices(xx, yy):
         y = yy
         plot_scatter_matrix(x,y,fname=os.path.join('plots', 'scatter_matrix_%s.png' % modalities[i]))
 
-def plot_predictions(coord, dim, pred, gt, fname=None, fpickle=None):
+def plot_predictions(coord, dim, pred, gt, pp_pred=None, fname=None, fpickle=None):
     assert coord.shape[0] == len(pred), "Number of coordinates must match to the number of labels (%d != %d)" % (coord.shape[0], len(pred))
     print "Plotting predictions..."
     D = np.ones((dim[0], dim[1], dim[2])) * -1
@@ -60,8 +78,14 @@ def plot_predictions(coord, dim, pred, gt, fname=None, fpickle=None):
     Dgt = np.ones((dim[0], dim[1], dim[2])) * -1
     for i in range(coord.shape[0]):
         Dgt[coord[i,0], coord[i,1], coord[i,2]] = gt[i]
-
+    if pp_pred is not None:
+        Dpp = np.ones((dim[0], dim[1], dim[2])) * -1
+        for i in range(coord.shape[0]):
+            Dpp[coord[i,0], coord[i,1], coord[i,2]] = pp_pred[i]
     n_layers = 7
+    n_rows = 2
+    if pp_pred is not None:
+        n_rows = 3
     zs = np.linspace(0, dim[2], n_layers+4)
     zs = map(int, zs[2:-2])
     plt.figure(2, figsize=(n_layers*4,10))
@@ -70,12 +94,17 @@ def plot_predictions(coord, dim, pred, gt, fname=None, fpickle=None):
     bounds = range(-1,6)
     norm = colors.BoundaryNorm(bounds, cmap.N)
     for i in range(n_layers):
-        plt.subplot(2,n_layers, i+1)
-        plt.imshow(D[:,:,zs[i]], interpolation='nearest', origin='lower', cmap=cmap, norm=norm)
-        plt.title('Prediction (z=%d)' % zs[i])
-        plt.subplot(2,n_layers, i+1+n_layers)
+        plt.subplot(n_rows,n_layers, i+1)
         plt.imshow(Dgt[:,:,zs[i]], interpolation='nearest', origin='lower', cmap=cmap, norm=norm)
         plt.title('Ground truth (z=%d)' % zs[i])
+        plt.subplot(n_rows,n_layers, i+1+n_layers)
+        plt.imshow(D[:,:,zs[i]], interpolation='nearest', origin='lower', cmap=cmap, norm=norm)
+        plt.title('Prediction (z=%d)' % zs[i])
+        if pp_pred is not None:
+            plt.subplot(n_rows,n_layers, i+1+2*n_layers)
+            plt.imshow(Dpp[:,:,zs[i]], interpolation='nearest', origin='lower', cmap=cmap, norm=norm)
+            plt.title('Post-processed (z=%d)' % zs[i])
+            
     if fname is None:
         plt.show()
     else:
@@ -108,6 +137,7 @@ def load_patient(number, do_preprocess=True, n_voxels=None):
     #x = data[row0:, [5,11,17,23]]
     if do_preprocess:
         x = preprocess(x)
+        pass
     coord = data[row0:, 2:5]
     if n_voxels is not None and isinstance(n_voxels, int):
         idxs = np.random.permutation(len(y))
@@ -175,6 +205,24 @@ def extract_label_features(coords, dims, pred_probs, patient_idxs):
             xlabel[pidxs[i],:] = label_hist[:, coord[0], coord[1], coord[2]]
     print "Extracted (%.2f seconds)." % (time.time()-t0)
     return xlabel
+    
+def post_process(coord, dim, pred):
+    t0 = time.time()
+    # 3D data matrix
+    D = np.ones((dim[0], dim[1], dim[2]), dtype=int) * -1
+    for i in range(coord.shape[0]):
+        D[coord[i,0], coord[i,1], coord[i,2]] = pred[i]
+    
+    D2 = D > 0
+    D3 = skimage.morphology.binary_closing(D2)
+    
+    D[D3==0] = 0
+    D[np.logical_and(D==0, D3==1)] = 2
+    new_pred = []
+    for i in range(coord.shape[0]):
+        new_pred.append(D[coord[i,0], coord[i,1], coord[i,2]])
+    print "Post-processing took %.2f seconds." % (time.time()-t0)
+    return np.array(new_pred, dtype=int)
 
 def dice(y, ypred):
     A = set(np.nonzero(y)[0])
@@ -222,7 +270,7 @@ def train_model(xtr, ytr, n_trees=10):
 
 def predict_and_evaluate(model, xte, yte=None, coord=None, dim=None,
                          pred_fname=None, plot_confmat=False, ret_probs=False,
-                         patient_idxs=None, pred_img_fname='slices.png',
+                         patient_idxs=None, pred_img_fname=None,
                          pred_3D_fname=None):
 
     # Predict and evaluate
@@ -232,7 +280,7 @@ def predict_and_evaluate(model, xte, yte=None, coord=None, dim=None,
         pred_probs = model.predict_proba(xte)
         pred = np.argmax(pred_probs, axis=1)
 
-    if yte is not None and patient_idxs is not None:
+    if yte is not None:
         print "\nConfusion matrix:"
         cm = confusion_matrix(yte, pred)
         print cm
@@ -243,10 +291,18 @@ def predict_and_evaluate(model, xte, yte=None, coord=None, dim=None,
         print "Majority vote:\t%.2f%%" % (bl_acc*100)
 
         dice_scores(yte, pred, patient_idxs=patient_idxs)
+        
+        pp_pred = post_process(coord, dim[0], pred)
+        dice_scores(yte, pp_pred, patient_idxs=patient_idxs, label='Dice scores (pp):')
 
-        if coord is not None and dim is not None:
+        if coord is not None and dim is not None and pred_img_fname is not None:
             # Plot the first patient
-            plot_predictions(coord[:patient_idxs[1]], dim[0], pred[:patient_idxs[1]], yte[:patient_idxs[1]], pred_img_fname, pred_3D_fname)
+            if patient_idxs is None:
+                patient_idxs = [0, len(yte)]
+            plot_predictions(coord[:patient_idxs[1]], dim[0], 
+                             pred[:patient_idxs[1]], yte[:patient_idxs[1]],
+                             pp_pred=pp_pred, fname=pred_img_fname,
+                             fpickle=pred_3D_fname)
         if pred_fname is not None:
             save_predictions(coord, dim[0], pred, yte, pred_fname)
 
@@ -261,16 +317,18 @@ def predict_and_evaluate(model, xte, yte=None, coord=None, dim=None,
         return pred
 
 def main():
+    datestr = re.sub('[ :]','',str(dt.datetime.now())[:-7])
+    os.makedirs(os.path.join('results', datestr))
     global fscores
-    fscores = open("results_%s.txt" % re.sub('[ :]','',str(dt.datetime.now())[:-7]), 'w')
+    fscores = open(os.path.join('results', datestr, "results_%s.txt" % datestr), 'w')
     
     np.random.seed(9823411)#133742)
 
     t_beg = time.time()
     patients = np.random.permutation(193) + 1
-    n_tr_p = 10 # Train patients
+    n_tr_p = 2 # Train patients
     n_de_p = 0 # Development patients
-    n_te_p = 1 # Test patients
+    n_te_p = 10 # Test patients
     assert n_tr_p + n_de_p + n_te_p < len(patients), \
             "Not enough patients available"
     train_patients = patients[:n_tr_p]
@@ -296,25 +354,9 @@ def main():
 
     #plot_all_scatter_matrices(xtr, ytr)
 
-    xte = np.zeros((0,0))
-    yte = np.zeros(0)
-    coordte = np.zeros((0,3))
-    patient_idxs_te = [0]
-    dims_te = []
-    print "Test users:"
-    for te_pat in test_patients:
-        x, y, coord, dim = load_patient(te_pat, n_voxels=None)
-        yte = np.concatenate((yte, y))
-        if xte.shape[0] == 0:
-            xte = x
-        else:
-            xte = np.vstack((xte, x))
-        coordte = np.vstack((coordte, coord))
-        patient_idxs_te.append(len(yte))
-        dims_te.append(dim)
-    n_non_zeros = sum(yte > 0)
-    print "%.1f%% tumor voxels (total %d)" % (100.0 * n_non_zeros / float(len(yte)), len(yte))
+    model = train_model(xtr, ytr, n_trees=30)
 
+    '''
     xde = np.zeros((0,0))
     yde = np.zeros(0)
     coordde = np.zeros((0,3))
@@ -331,15 +373,7 @@ def main():
         coordde = np.vstack((coordde, coord))
         patient_idxs_de.append(len(yde))
         dims_de.append(dim)
-
-    model = train_model(xtr, ytr, n_trees=10)
-    pred = predict_and_evaluate(
-            model, xte, yte, coord=coordte, dim=dims_te,
-            pred_fname=os.path.join('predictions', 'pat%d_pred.csv' % test_patients[0]),
-            patient_idxs=patient_idxs_te,
-            pred_img_fname=os.path.join('plots', 'pat%d_slices_0.png' % test_patients[0]),
-            pred_3D_fname=os.path.join('plots', 'pat%d_3D.pckl' % test_patients[0]))
-    '''
+    
     pred_probs_de = predict_and_evaluate(model, xde, yde, plot_confmat=False, ret_probs=True, patient_idxs=patient_idxs_de)
     xlabel = extract_label_features(coordde, dims_de, pred_probs_de, patient_idxs_de)
     smoothed_pred = np.argmax(xlabel, axis=1)
@@ -348,26 +382,42 @@ def main():
 
     xde2 = np.hstack((xde, xlabel))
     model2 = train_model(xde2, yde, n_trees=10)
-
+    '''
+    
     print "\n----------------------------------\n"
 
-    pred_probs_te = predict_and_evaluate(
-            model, xte, yte, coord=coordte, dim=dims_te, plot_confmat=False,
-            ret_probs=True, patient_idxs=patient_idxs_te,
-            pred_img_fname=os.path.join('plots', 'pat%d_slices_0.png' % test_patients[0]))
-    for i in range(1):
-        xlabel_te = extract_label_features(coordte, dims_te, pred_probs_te,
-                                           patient_idxs_te)
-        smoothed_pred = np.argmax(xlabel_te, axis=1)
-        dice_scores(yte, smoothed_pred, patient_idxs=patient_idxs_te,
-                    label='Test smoothed dice scores (iteration %d):' % (i+1))
+    yte = np.zeros(0)
+    predte = np.zeros(0)
+    patient_idxs_te = [0]
+    print "Test users:"
+    for te_idx, te_pat in enumerate(test_patients):
+        print "Test patient number %d" % te_idx
+        x, y, coord, dim = load_patient(te_pat, n_voxels=None)
+        yte = np.concatenate((yte, y))
+        patient_idxs_te.append(len(yte))
 
-        xte2 = np.hstack((xte, xlabel_te))
         pred_probs_te = predict_and_evaluate(
-                model2, xte2, yte, coord=coordte, dim=dims_te, pred_fname=None,
-                plot_confmat=False, ret_probs=True, patient_idxs=patient_idxs_te,
-                pred_img_fname=os.path.join('plots', 'pat%d_slices_%d.png' % (test_patients[0], i+1)))
-    '''
+                model, x, y, coord=coord, dim=[dim], plot_confmat=False,
+                ret_probs=True, patient_idxs=None,
+                pred_img_fname=os.path.join('results', datestr, 'pat%d_slices_0.png' % te_pat))
+        pred = np.argmax(pred_probs_te, axis=1)
+        predte = np.concatenate((predte, pred))
+        '''
+        for i in range(1):
+            xlabel_te = extract_label_features(coordte, dims_te, pred_probs_te,
+                                               patient_idxs_te)
+            smoothed_pred = np.argmax(xlabel_te, axis=1)
+            dice_scores(yte, smoothed_pred, patient_idxs=patient_idxs_te,
+                        label='Test smoothed dice scores (iteration %d):' % (i+1))
+    
+            xte2 = np.hstack((xte, xlabel_te))
+            pred_probs_te = predict_and_evaluate(
+                    model2, xte2, yte, coord=coordte, dim=dims_te, pred_fname=None,
+                    plot_confmat=False, ret_probs=True, patient_idxs=patient_idxs_te,
+                    pred_img_fname=os.path.join('plots', 'pat%d_slices_%d.png' % (test_patients[0], i+1)))
+        '''
+    #'''
+    dice_scores(yte, predte, patient_idxs=patient_idxs_te, label='Overall dice scores:')
     print "Total time: %.2f seconds." % (time.time()-t_beg)
     fscores.close()
 
