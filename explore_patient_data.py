@@ -314,7 +314,7 @@ def predict_and_evaluate(model, xte, yte=None, coord=None, dim=None,
     if ret_probs:
         return pred_probs
     else:
-        return pred
+        return pp_pred
 
 def main():
     datestr = re.sub('[ :]','',str(dt.datetime.now())[:-7])
@@ -326,7 +326,7 @@ def main():
 
     t_beg = time.time()
     patients = np.random.permutation(193) + 1
-    n_tr_p = 2 # Train patients
+    n_tr_p = 10 # Train patients
     n_de_p = 0 # Development patients
     n_te_p = 10 # Test patients
     assert n_tr_p + n_de_p + n_te_p < len(patients), \
