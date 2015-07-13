@@ -9,119 +9,12 @@ import time
 import datetime as dt
 import matplotlib.pyplot as plt
 import sys
-import os.path
-import cPickle as pickle
+import os
 import re
-import code
+import random
 
-def keyboard(banner=None):
-    ''' Function that mimics the matlab keyboard command '''
-    # use exception trick to pick up the current frame
-    try:
-        raise None
-    except:
-        frame = sys.exc_info()[2].tb_frame.f_back
-    print "# Use quit() to exit :) Happy debugging!"
-    # evaluate commands in current namespace
-    namespace = frame.f_globals.copy()
-    namespace.update(frame.f_locals)
-    try:
-        code.interact(banner=banner, local=namespace)
-    except SystemExit:
-        return 
-
-def plot_cm(cm, title='Confusion matrix', cmap=plt.cm.Blues):
-    plt.imshow(cm, interpolation='nearest', cmap=cmap)
-    plt.title(title)
-    plt.colorbar()
-    #tick_marks = np.arange(len(iris.target_names))
-    #plt.xticks(tick_marks, iris.target_names, rotation=45)
-    #plt.yticks(tick_marks, iris.target_names)
-    plt.tight_layout()
-    plt.ylabel('True label')
-    plt.xlabel('Predicted label')
-
-def plot_confusion_matrix(cm):
-    plt.subplot(121)
-    #plot_cm(np.log(cm), title='Confusion matrix (log scale)')
-    plot_cm(cm, title='Confusion matrix')
-
-    cm_normalized = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
-    plt.subplot(122)
-    plot_cm(cm_normalized, title='Normalized confusion matrix')
-
-def plot_scatter_matrix(x,y,fname='scatter_matrix.png'):
-    import pandas as pd
-    from pandas.tools.plotting import scatter_matrix
-    df = pd.DataFrame(np.hstack((x,y.reshape(len(y),1))), columns=['intensity', 'gaussian', 'gradient mag', 'grad dir', 'laplacian', 'imglog', 'label'])
-    df['label'] = df['label'].astype(int)
-    colors = ['red','green','blue','cyan','black']
-    import matplotlib.pyplot as plt
-    scatter_matrix(df,figsize=[9,7],marker='x',c=df.label.apply(lambda xx:colors[xx]))
-    plt.savefig(fname)
-    print "Saved scatter matrix to %s" % fname
-
-def plot_all_scatter_matrices(xx, yy):
-    modalities = ['FLAIR', 'T1C', 'T1', 'T2']
-    for i in range(4):
-        idxs = range(i*6,(i+1)*6)
-        x = xx[:,idxs]
-        y = yy
-        plot_scatter_matrix(x,y,fname=os.path.join('plots', 'scatter_matrix_%s.png' % modalities[i]))
-
-def plot_predictions(coord, dim, pred, gt, pp_pred=None, fname=None, fpickle=None):
-    assert coord.shape[0] == len(pred), "Number of coordinates must match to the number of labels (%d != %d)" % (coord.shape[0], len(pred))
-    print "Plotting predictions..."
-    D = np.ones((dim[0], dim[1], dim[2])) * -1
-    for i in range(coord.shape[0]):
-        D[coord[i,0], coord[i,1], coord[i,2]] = pred[i]
-    Dgt = np.ones((dim[0], dim[1], dim[2])) * -1
-    for i in range(coord.shape[0]):
-        Dgt[coord[i,0], coord[i,1], coord[i,2]] = gt[i]
-    if pp_pred is not None:
-        Dpp = np.ones((dim[0], dim[1], dim[2])) * -1
-        for i in range(coord.shape[0]):
-            Dpp[coord[i,0], coord[i,1], coord[i,2]] = pp_pred[i]
-    n_layers = 7
-    n_rows = 2
-    if pp_pred is not None:
-        n_rows = 3
-    zs = np.linspace(0, dim[2], n_layers+4)
-    zs = map(int, zs[2:-2])
-    plt.figure(2, figsize=(n_layers*4,10))
-    from matplotlib import colors
-    cmap = colors.ListedColormap(['white', 'orange', 'red', 'blue', 'green', 'black'])
-    bounds = range(-1,6)
-    norm = colors.BoundaryNorm(bounds, cmap.N)
-    for i in range(n_layers):
-        plt.subplot(n_rows,n_layers, i+1)
-        plt.imshow(Dgt[:,:,zs[i]], interpolation='nearest', origin='lower', cmap=cmap, norm=norm)
-        plt.title('Ground truth (z=%d)' % zs[i])
-        plt.subplot(n_rows,n_layers, i+1+n_layers)
-        plt.imshow(D[:,:,zs[i]], interpolation='nearest', origin='lower', cmap=cmap, norm=norm)
-        plt.title('Prediction (z=%d)' % zs[i])
-        if pp_pred is not None:
-            plt.subplot(n_rows,n_layers, i+1+2*n_layers)
-            plt.imshow(Dpp[:,:,zs[i]], interpolation='nearest', origin='lower', cmap=cmap, norm=norm)
-            plt.title('Post-processed (z=%d)' % zs[i])
-            
-    if fname is None:
-        plt.show()
-    else:
-        plt.savefig(fname)
-    if fpickle is not None:
-        with open(fpickle, 'wb') as fp:
-            pickle.dump(D, fp)
-
-def save_predictions(coord, dim, pred, gt, fname='pred.csv'):
-    print 'Writing predictions to %s...' % fname
-    with open(fname, 'w') as fout:
-        fout.write('x,y,z,pred,ground_truth\n')
-        for i in range(coord.shape[0]):
-            fout.write('%d,%d,%d,%d,%d\n' % (coord[i,0], coord[i,1], coord[i,2], pred[i], gt[i]))
-    with open(fname+'.dim', 'w') as fout2:
-        fout2.write('%d,%d,%d\n' % (dim[0], dim[1], dim[2]))
-    print 'Written.'
+import patient_plotting as pp
+import extras
 
 def load_patient(number, do_preprocess=True, n_voxels=None):
     data = scipy.io.loadmat(os.path.join('data', 'Patient_Features_%d.mat' % number))
@@ -268,7 +161,7 @@ def train_model(xtr, ytr, n_trees=10):
         print model.feature_importances_[i*6:(i+1)*6]
     return model
 
-def predict_and_evaluate(model, xte, yte=None, coord=None, dim=None,
+def predict_and_evaluate(model, xte, yte=None, coord=None, dim_list=None,
                          pred_fname=None, plot_confmat=False, ret_probs=False,
                          patient_idxs=None, pred_img_fname=None,
                          pred_3D_fname=None):
@@ -292,23 +185,23 @@ def predict_and_evaluate(model, xte, yte=None, coord=None, dim=None,
 
         dice_scores(yte, pred, patient_idxs=patient_idxs)
         
-        pp_pred = post_process(coord, dim[0], pred)
+        pp_pred = post_process(coord, dim_list[0], pred)
         dice_scores(yte, pp_pred, patient_idxs=patient_idxs, label='Dice scores (pp):')
 
-        if coord is not None and dim is not None and pred_img_fname is not None:
+        if coord is not None and dim_list is not None and pred_img_fname is not None:
             # Plot the first patient
             if patient_idxs is None:
                 patient_idxs = [0, len(yte)]
-            plot_predictions(coord[:patient_idxs[1]], dim[0], 
-                             pred[:patient_idxs[1]], yte[:patient_idxs[1]],
-                             pp_pred=pp_pred, fname=pred_img_fname,
-                             fpickle=pred_3D_fname)
+            pp.plot_predictions(coord[:patient_idxs[1]], dim_list[0], 
+                                pred[:patient_idxs[1]], yte[:patient_idxs[1]],
+                                pp_pred=pp_pred, fname=pred_img_fname,
+                                fpickle=pred_3D_fname)
         if pred_fname is not None:
-            save_predictions(coord, dim[0], pred, yte, pred_fname)
+            extras.save_predictions(coord, dim_list[0], pred, yte, pred_fname)
 
         if plot_confmat:
             plt.figure()
-            plot_confusion_matrix(cm)
+            pp.plot_confusion_matrix(cm)
             plt.show()
 
     if ret_probs:
@@ -325,10 +218,18 @@ def main():
     np.random.seed(9823411)#133742)
 
     t_beg = time.time()
-    patients = np.random.permutation(193) + 1
-    n_tr_p = 10 # Train patients
+    available_files = os.listdir('data')
+    patients = []
+    for f in available_files:
+        m = re.match("Patient_Features_(\d+)\.mat", f)
+        if m:
+            patients.append(int(m.group(1)))
+    random.shuffle(patients)
+    print patients
+    #patients = np.random.permutation(193) + 1
+    n_tr_p = 2 # Train patients
     n_de_p = 0 # Development patients
-    n_te_p = 10 # Test patients
+    n_te_p = 5 # Test patients
     assert n_tr_p + n_de_p + n_te_p < len(patients), \
             "Not enough patients available"
     train_patients = patients[:n_tr_p]
@@ -352,7 +253,7 @@ def main():
         patient_idxs_tr.append(len(ytr))
         dims_tr.append(dim)
 
-    #plot_all_scatter_matrices(xtr, ytr)
+    #pp.plot_all_scatter_matrices(xtr, ytr)
 
     model = train_model(xtr, ytr, n_trees=30)
 
@@ -391,13 +292,13 @@ def main():
     patient_idxs_te = [0]
     print "Test users:"
     for te_idx, te_pat in enumerate(test_patients):
-        print "Test patient number %d" % te_idx
+        print "Test patient number %d" % (te_idx+1)
         x, y, coord, dim = load_patient(te_pat, n_voxels=None)
         yte = np.concatenate((yte, y))
         patient_idxs_te.append(len(yte))
 
         pred_probs_te = predict_and_evaluate(
-                model, x, y, coord=coord, dim=[dim], plot_confmat=False,
+                model, x, y, coord=coord, dim_list=[dim], plot_confmat=False,
                 ret_probs=True, patient_idxs=None,
                 pred_img_fname=os.path.join('results', datestr, 'pat%d_slices_0.png' % te_pat))
         pred = np.argmax(pred_probs_te, axis=1)
@@ -412,7 +313,7 @@ def main():
     
             xte2 = np.hstack((xte, xlabel_te))
             pred_probs_te = predict_and_evaluate(
-                    model2, xte2, yte, coord=coordte, dim=dims_te, pred_fname=None,
+                    model2, xte2, yte, coord=coordte, dim_list=dims_te, pred_fname=None,
                     plot_confmat=False, ret_probs=True, patient_idxs=patient_idxs_te,
                     pred_img_fname=os.path.join('plots', 'pat%d_slices_%d.png' % (test_patients[0], i+1)))
         '''
