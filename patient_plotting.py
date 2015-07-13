@@ -84,4 +84,5 @@ def plot_predictions(coord, dim, pred, gt, pp_pred=None, fname=None, fpickle=Non
     if fpickle is not None:
         with open(fpickle, 'wb') as fp:
             pickle.dump(D, fp)
+    print "Done.\n"
 
