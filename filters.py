@@ -20,32 +20,46 @@ def gen_synth_data(row=4,col=4):
 	minor_diag2 = np.array(mdiag2);
 
 	S = np.diag(minor_diag1,1) + np.diag(minor_diag2,col);
-	print S+S.T;
 	return S+S.T;
 	
 
 def skimage_apply_filters(mat,connectivity=2):	#expects numpy array
-	label_mat,rc = label(mat,background=0,return_num=True,connectivity=1);
-	index_by_value = collecions.defaultdict(list);
-	cnt = np.zeros(rc);
-	for i,x in np.ndenumerae(label_mat):
-		index_by_value[x].append(i);
-		cnt[x] += 1;
-	
-	cnt = cnt>10;	#get coponents which are greater than 10;
-	
-	
-	
 	selem = ball(10);
+	mat = closing(mat,selem);
+
+	label_mat,rc = label(mat,background=0,return_num=True,connectivity=2);
+	label_mat+=1;	#background has to be labelled as 0, not as -1;
+	rc +=1;	#size is 1 + maximum label.
+	index_by_value = collections.defaultdict(dict);
+	cnt = np.zeros(rc);
+	for i,x in np.ndenumerate(label_mat):
+		if 'r' in index_by_value[x]:
+			index_by_value[x]['r'].append(int(i[0]));
+		else:
+			index_by_value[x]['r'] = [int(i[0])];
+		if 'c' in index_by_value[x]:
+			index_by_value[x]['c'].append(int(i[1]));
+		else:
+			index_by_value[x]['c'] = [int(i[1])];
+		cnt[x] += 1;
+
+	#Get rid of small connected components
+	for j in np.nditer(np.where(cnt<10)):	#get indices whose count smaller than 20;
+		t = index_by_value[int(j)];
+		mat[t['r'],t['c']]=0;	#set it to background;
+
+	
+	#selem = ball(10);
 	#footprint = sp.ndimage.generate_binary_structure(3,1);
 	#eroded = sp.ndimage.grey_erosion(mat, size=(3,3,3));
 	#eroded = erosion(mat, selem);
 	#return opening(mat,selem);
-	return closing(mat,selem);
+	#mat = opening(mat,selem);
 	#return label(mat,background=0,connectivity=2);
 	
 	#rgb_mat = color.lab2rgb(label_mat);
 	#return color.rgb2grey(rgb_mat);
+	return mat;
 
 
 def store_as_csv(mat):
