@@ -42,23 +42,26 @@ def plot_all_scatter_matrices(xx, yy):
         y = yy
         plot_scatter_matrix(x,y,fname=os.path.join('plots', 'scatter_matrix_%s.png' % modalities[i]))
 
-def plot_predictions(coord, dim, pred, gt, pp_pred=None, fname=None, fpickle=None):
+def plot_predictions(coord, dim, pred, gt=None, pp_pred=None, fname=None, fpickle=None):
     assert coord.shape[0] == len(pred), "Number of coordinates must match to the number of labels (%d != %d)" % (coord.shape[0], len(pred))
     print "Plotting predictions..."
     D = np.ones((dim[0], dim[1], dim[2])) * -1
     for i in range(coord.shape[0]):
         D[coord[i,0], coord[i,1], coord[i,2]] = pred[i]
-    Dgt = np.ones((dim[0], dim[1], dim[2])) * -1
-    for i in range(coord.shape[0]):
-        Dgt[coord[i,0], coord[i,1], coord[i,2]] = gt[i]
+    if gt is not None:
+        Dgt = np.ones((dim[0], dim[1], dim[2])) * -1
+        for i in range(coord.shape[0]):
+            Dgt[coord[i,0], coord[i,1], coord[i,2]] = gt[i]
     if pp_pred is not None:
         Dpp = np.ones((dim[0], dim[1], dim[2])) * -1
         for i in range(coord.shape[0]):
             Dpp[coord[i,0], coord[i,1], coord[i,2]] = pp_pred[i]
     n_layers = 7
-    n_rows = 2
+    n_rows = 1
+    if gt is not None:
+        n_rows += 1
     if pp_pred is not None:
-        n_rows = 3
+        n_rows += 1
     zs = np.linspace(0, dim[2], n_layers+4)
     zs = map(int, zs[2:-2])
     plt.figure(2, figsize=(n_layers*4,10))
@@ -66,14 +69,18 @@ def plot_predictions(coord, dim, pred, gt, pp_pred=None, fname=None, fpickle=Non
     bounds = range(-1,6)
     norm = colors.BoundaryNorm(bounds, cmap.N)
     for i in range(n_layers):
-        plt.subplot(n_rows,n_layers, i+1)
-        plt.imshow(Dgt[:,:,zs[i]], interpolation='nearest', origin='lower', cmap=cmap, norm=norm)
-        plt.title('Ground truth (z=%d)' % zs[i])
-        plt.subplot(n_rows,n_layers, i+1+n_layers)
+        row_idx = 0
+        if gt is not None:
+            plt.subplot(n_rows,n_layers, i+1)
+            plt.imshow(Dgt[:,:,zs[i]], interpolation='nearest', origin='lower', cmap=cmap, norm=norm)
+            plt.title('Ground truth (z=%d)' % zs[i])
+            row_idx += 1
+        plt.subplot(n_rows,n_layers, i+1+(row_idx*n_layers))
         plt.imshow(D[:,:,zs[i]], interpolation='nearest', origin='lower', cmap=cmap, norm=norm)
         plt.title('Prediction (z=%d)' % zs[i])
+        row_idx += 1
         if pp_pred is not None:
-            plt.subplot(n_rows,n_layers, i+1+2*n_layers)
+            plt.subplot(n_rows,n_layers, i+1+(row_idx*n_layers))
             plt.imshow(Dpp[:,:,zs[i]], interpolation='nearest', origin='lower', cmap=cmap, norm=norm)
             plt.title('Post-processed (z=%d)' % zs[i])
             
@@ -86,3 +93,10 @@ def plot_predictions(coord, dim, pred, gt, pp_pred=None, fname=None, fpickle=Non
             pickle.dump(D, fp)
     print "Done.\n"
 
+def save_pred_probs_csv(coord, dim, pred_probs, fname):
+    X = np.hstack((coord, pred_probs))
+    header = np.zeros((1,X.shape[1]))
+    header[0,:3] = dim
+    X = np.vstack((header, X))
+    np.savetxt(fname, X)
+    print "Saved %s" % fname

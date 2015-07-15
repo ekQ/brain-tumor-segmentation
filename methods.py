@@ -2,6 +2,7 @@ from evaluation import dice_scores
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.ensemble import ExtraTreesClassifier
+from sklearn.linear_model import PassiveAggressiveClassifier
 from sklearn import svm
 from sklearn.metrics import confusion_matrix
 import time
@@ -139,6 +140,7 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
 
     yte = np.zeros(0)
     predte = np.zeros(0)
+    predte_no_pp = np.zeros(0)
     patient_idxs_te = [0]
     print "Test users:"
     # Iterate over test users
@@ -151,22 +153,37 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
 
         tumor_idxs = pp_pred == 1
         pred2 = model2.predict(x[tumor_idxs,:])
+        pp_pred15 = pp_pred
+        '''
+        TODO
+        pred_probs2 = model2.predict_proba(x[tumor_idxs,:])
+        pp_pred15 = np.array(pp_pred)
+        pp_pred15[tumor_idxs] = np.argmax(pred_probs2, axis=1) + 1
+        print "\nConfusion matrix:"
+        cm = confusion_matrix(y, pp_pred15)
+        print cm
+        dice_scores(y, pp_pred15, label='Dice scores:')
+
+        pred2 = dp.post_process(coord[tumor_idxs,:], dim, None, pred_probs2) + 1
+        print "Unique MRF values:", np.unique(pred2)
+        '''
         pp_pred[tumor_idxs] = pred2
 
-        print "\nConfusion matrix:"
+        print "\nConfusion matrix (pp):"
         cm = confusion_matrix(y, pp_pred)
         print cm
 
         yte = np.concatenate((yte, y))
         patient_idxs_te.append(len(yte))
         predte = np.concatenate((predte, pp_pred))
+        #TODOpredte_no_pp = np.concatenate((predte_no_pp, pp_pred15))
 
         dice_scores(y, pp_pred, label='Dice scores (pp):')
 
         if plot_predictions:
             # Plot the patient
             pif = os.path.join('results', 'pat%d_slices_0_2S.png' % te_pat)
-            pp.plot_predictions(coord, dim, pp_pred, y, fname=pif)
+            pp.plot_predictions(coord, dim, pp_pred15, y, pp_pred, fname=pif)
             #if pred_fname is not None:
             #    extras.save_predictions(coord, dim_list[0], pred, yte, pred_fname)
 
@@ -176,6 +193,9 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
 
     dice_scores(yte, predte, patient_idxs=patient_idxs_te,
                 label='Overall dice scores (two-stage):', fscores=fscores)
+
+    #TODOdice_scores(yte, predte_no_pp, patient_idxs=patient_idxs_te,
+    #            label='Overall dice scores (two-stage, no MRF):', fscores=fscores)
 
 
 def train_RF_model(xtr, ytr, n_trees=10, sample_weight=None):
@@ -192,6 +212,66 @@ def train_RF_model(xtr, ytr, n_trees=10, sample_weight=None):
         print model.feature_importances_[i*20:(i+1)*20]
     return model
 
+def predict_online(train_pats, test_pats, fscores=None, plot_predictions=False,
+                   stratified=False):
+    """
+    Predict tumor voxels for given test patients.
+
+    Input:
+        train_pats -- list of patient IDs used for training a model.
+        test_pats -- list of patient IDs used for testing a model.
+        fscores -- An opened output file to which we write the results.
+    """
+
+    #xtr, ytr, coordtr, patient_idxs_tr, dims_tr = dp.load_patients(train_pats,
+    #                                                               stratified)
+    model = None
+    for tr_idx, tr_pat in enumerate(train_pats):
+        print "Train patient number %d" % (tr_idx+1)
+        x, y, coord, dim = dp.load_patient(tr_pat, n_voxels=10000)
+        model = train_online_model(x, y, model)
+
+    print "\n----------------------------------\n"
+
+    yte = np.zeros(0)
+    predte = np.zeros(0)
+    patient_idxs_te = [0]
+    print "Test users:"
+    # Iterate over test users
+    for te_idx, te_pat in enumerate(test_pats):
+        print "Test patient number %d" % (te_idx+1)
+        x, y, coord, dim = dp.load_patient(te_pat, n_voxels=None)
+
+        if plot_predictions:
+            pif = os.path.join('plots', 'pat%d_slices_0_online.png' % te_pat)
+        else:
+            pif = None
+        pred = predict_and_evaluate(
+                model, x, y, coord=coord, dim_list=[dim], plot_confmat=False,
+                ret_probs=False, patient_idxs=None,
+                pred_img_fname=pif)
+
+        yte = np.concatenate((yte, y))
+        patient_idxs_te.append(len(yte))
+        predte = np.concatenate((predte, pred))
+
+    print "\nOverall confusion matrix:"
+    cm = confusion_matrix(yte, predte)
+    print cm
+
+    dice_scores(yte, predte, patient_idxs=patient_idxs_te,
+                label='Overall dice scores (RF):', fscores=fscores)
+
+def train_online_model(xtr, ytr, model=None):
+    # Train classifier
+    t0 = time.time()
+    if model is None:
+        model = PassiveAggressiveClassifier()
+        model.fit(xtr, ytr)
+    else:
+        model.partial_fit(xtr, ytr)
+    print "Training took %.2f seconds" % (time.time()-t0)
+    return model
 
 def predict_and_evaluate(model, xte, yte=None, coord=None, dim_list=None,
                          pred_fname=None, plot_confmat=False, ret_probs=False,
@@ -199,11 +279,10 @@ def predict_and_evaluate(model, xte, yte=None, coord=None, dim_list=None,
                          pred_3D_fname=None):
 
     # Predict and evaluate
-    if not ret_probs:
-        pred = model.predict(xte)
-    else:
-        pred_probs = model.predict_proba(xte)
-        pred = np.argmax(pred_probs, axis=1)
+    pred_probs = model.predict_proba(xte)
+    print "Pred probs size:", pred_probs.shape
+    pred = np.argmax(pred_probs, axis=1)
+    #pp.save_pred_probs_csv(coord, dim_list[0], pred_probs, 'pred_probs.csv')
 
     if yte is not None:
         print "\nConfusion matrix:"
@@ -217,7 +296,7 @@ def predict_and_evaluate(model, xte, yte=None, coord=None, dim_list=None,
 
         dice_scores(yte, pred, patient_idxs=patient_idxs)
         
-        pp_pred = dp.post_process(coord, dim_list[0], pred)
+        pp_pred = dp.post_process(coord, dim_list[0], pred, pred_probs)
         dice_scores(yte, pp_pred, patient_idxs=patient_idxs, label='Dice scores (pp):')
 
         if coord is not None and dim_list is not None and pred_img_fname is not None:

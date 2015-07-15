@@ -3,6 +3,9 @@ import scipy.io
 import time
 import numpy as np
 import os
+import sys
+#sys.path.append("/home/ekku/Documents/work/qcri/miccai/gco_python-master")
+#import pygco
 
 def preprocess(x):
     # Median to zero
@@ -11,7 +14,11 @@ def preprocess(x):
     x /= np.std(x,0)
     return x
 
-def post_process(coord, dim, pred):
+def post_process(coord, dim, pred, pred_probs=None):
+    if pred_probs is not None:
+        #return mrf(coord, pred_probs)
+        pred = np.argmax(pred_probs, axis=1)
+
     t0 = time.time()
     # 3D data matrix
     D = np.ones((dim[0], dim[1], dim[2]), dtype=int) * -1
@@ -19,15 +26,71 @@ def post_process(coord, dim, pred):
         D[coord[i,0], coord[i,1], coord[i,2]] = pred[i]
     
     D2 = D > 0
-    D3 = skimage.morphology.binary_closing(D2)
+    neighborhood = skimage.morphology.ball(6)
+    D3 = skimage.morphology.binary_closing(D2, neighborhood)
     
     D[D3==0] = 0
     D[np.logical_and(D==0, D3==1)] = 2
+
+    remove_small_components(D)
+
     new_pred = []
     for i in range(coord.shape[0]):
         new_pred.append(D[coord[i,0], coord[i,1], coord[i,2]])
     print "Post-processing took %.2f seconds." % (time.time()-t0)
     return np.array(new_pred, dtype=int)
+
+def mrf(coords, probs):
+    assert coords.shape[0] == probs.shape[0], "Length of coordinates (%d) and probs (%d) must be equal." % (coords.shape[0], probs.shape[0])
+    n = probs.shape[0]
+    n_labels = probs.shape[1]
+
+    coords = coords.astype(np.int32)
+
+    t0 = time.time()
+    neighs = []
+    for i in range(-1,1):
+        for j in range(-1,1):
+            for k in range(-1,1):
+                if i==0 and j==0 and k==0:
+                    continue
+                neighs.append(np.array([i,j,k],dtype=np.int32))
+    vox_map = {}
+    edges = []
+    probs2 = np.zeros(probs.shape)
+    for l in range(n):
+        probs2[l,:] = -1 * np.log(probs[l,:])
+        coord = coords[l,:]
+        coord_tup = tuple(coord)
+        assert coord_tup not in vox_map, "Same coordinate appearing twice %s" % str(coord_tup)
+        coord_idx = len(vox_map)
+        vox_map[coord_tup] = coord_idx
+        for neigh in neighs:
+            coord2 = coord + neigh
+            coord2_tup = tuple(coord2)
+            if coord2_tup in vox_map:
+                edges.append((coord_idx, vox_map[coord2_tup]))
+    print "Graph creation took %.2f seconds (%d edges)." % (time.time()-t0, len(edges))
+    probs2 = (100 * probs2).astype(np.int32)
+    edges = np.asarray(edges, dtype=np.int32)
+
+    # Potential
+    potential = -1 * np.eye(n_labels, dtype=np.int32)
+    t0 = time.time()
+    smoothed_pred = pygco.cut_from_graph(edges, probs2, potential)
+    print "MRF took %.2f seconds." % (time.time()-t0)
+    return smoothed_pred
+
+def remove_small_components(D, min_component_size=3000):
+    t0 = time.time()
+    C, n_components = scipy.ndimage.measurements.label(D)
+    n_removed = 0
+    for i in range(1,n_components+1):
+        component = np.nonzero(C==i)
+        if len(component[0]) < min_component_size:
+            D[component] = 0
+            n_removed += 1
+    print "Removed %d out of %d components (%.2f seconds)." % (n_removed, n_components, time.time()-t0)
 
 class_counts = np.zeros(5)
 
