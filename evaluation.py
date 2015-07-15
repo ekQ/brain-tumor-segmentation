@@ -3,10 +3,14 @@ import numpy as np
 def dice(y, ypred):
     A = set(np.nonzero(y)[0])
     B = set(np.nonzero(ypred)[0])
+    print len(A);
+    print len(B);
     score = 2*len(A & B) / float(len(A) + len(B))
     return score
 
 def dice_scores(y, ypred, patient_idxs=None, label='Dice scores:', fscores=None):
+    print len(y);
+    print len(ypred);
     if patient_idxs is None:
         patient_idxs = [0, len(y)]
     ds = np.zeros((len(patient_idxs)-1,3))

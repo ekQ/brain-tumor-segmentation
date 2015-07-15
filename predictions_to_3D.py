@@ -17,6 +17,7 @@ def predictions_to_3d(pred_fname, fpickle=None):
     X = np.loadtxt(open(pred_fname,"rb"), delimiter=",", skiprows=1)
     coord = X[:,:3]
     pred = X[:,3]
+    orig = X[:,4];
 
     # Load dimensions of the data
     fdim = open(pred_fname+'.dim', 'r')
@@ -25,15 +26,17 @@ def predictions_to_3d(pred_fname, fpickle=None):
 
     # 3D data matrix
     D = np.ones((dim[0], dim[1], dim[2])) * -1
+    E = np.ones((dim[0], dim[1], dim[2])) * -1
     for i in range(coord.shape[0]):
         D[coord[i,0], coord[i,1], coord[i,2]] = pred[i]
+        E[coord[i,0], coord[i,1], coord[i,2]] = orig[i]
     
     # Save the prediction matrix to file if filename is provided
     if fpickle is not None:
         with open(fpickle, 'wb') as fp:
             pickle.dump(D, fp)
     
-    return D
+    return (D,E);
     
 if __name__ == "__main__":
     patient_id = 174

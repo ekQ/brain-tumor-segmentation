@@ -25,15 +25,15 @@ def gen_synth_data(row=4,col=4):
 	
 
 def skimage_apply_filters(mat,connectivity=2):	#expects numpy array
-	label_mat = label(mat,background=0,connectivity=1);
-	rc = np.max(label_mat);
+	label_mat,rc = label(mat,background=0,return_num=True,connectivity=1);
 	index_by_value = collecions.defaultdict(list);
-	cnt = np.zeors(rc);
+	cnt = np.zeros(rc);
 	for i,x in np.ndenumerae(label_mat):
 		index_by_value[x].append(i);
 		cnt[x] += 1;
 	
-	for in
+	cnt = cnt>10;	#get coponents which are greater than 10;
+	
 	
 	
 	selem = ball(10);
