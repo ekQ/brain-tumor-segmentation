@@ -10,8 +10,9 @@ import patient_plotting as pp
 import extras
 import methods
 
+seed = 98234111
+
 def run_experiment(method):
-    seed = 98234111
 
     method_names = {1:'RF', 2:'two-stage', 3:'online'}
     datestr = re.sub('[ :]','',str(dt.datetime.now())[:-7])
