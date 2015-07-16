@@ -14,7 +14,7 @@ def preprocess(x):
     x /= np.std(x,0)
     return x
 
-def post_process(coord, dim, pred, pred_probs=None):
+def post_process(coord, dim, pred, pred_probs=None, remove_components=True, binary_closing=False):
     if pred_probs is not None:
         #return mrf(coord, pred_probs)
         pred = np.argmax(pred_probs, axis=1)
@@ -25,14 +25,18 @@ def post_process(coord, dim, pred, pred_probs=None):
     for i in range(coord.shape[0]):
         D[coord[i,0], coord[i,1], coord[i,2]] = pred[i]
     
-    D2 = D > 0
     neighborhood = skimage.morphology.ball(6)
-    D3 = skimage.morphology.binary_closing(D2, neighborhood)
     
-    D[D3==0] = 0
-    D[np.logical_and(D==0, D3==1)] = 2
-
-    remove_small_components(D)
+    if binary_closing:
+        D2 = D > 0
+        D = skimage.morphology.binary_closing(D2, neighborhood)
+        #D[D3==0] = 0
+        #D[np.logical_and(D==0, D3==1)] = 2
+    else:
+        D = skimage.morphology.closing(D, neighborhood)
+    
+    if remove_components:
+        remove_small_components(D)
 
     new_pred = []
     for i in range(coord.shape[0]):
@@ -81,7 +85,7 @@ def mrf(coords, probs):
     print "MRF took %.2f seconds." % (time.time()-t0)
     return smoothed_pred
 
-def remove_small_components(D, min_component_size=3000):
+def remove_small_components(D, min_component_size=10):
     t0 = time.time()
     C, n_components = scipy.ndimage.measurements.label(D)
     n_removed = 0
@@ -104,6 +108,7 @@ def load_patient(number, do_preprocess=True, n_voxels=None, stratified=False):
     row0 = 5
     y = data[row0:, 1]
     x = data[row0:, 5:]
+    #x = x[:, [19, 18, 10, 0, 79, 9, 70, 69, 8, 15, 60]]
     #x = data[row0:, 5:11]
     #x = data[row0:, [5,11,17,23]]
     if do_preprocess:

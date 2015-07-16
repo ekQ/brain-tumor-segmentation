@@ -25,17 +25,19 @@ def predict_RF(train_pats, test_pats, fscores=None, plot_predictions=False,
     xtr, ytr, coordtr, patient_idxs_tr, dims_tr = dp.load_patients(train_pats,
                                                                    stratified)
 
-    # Class frequencies in the whole dataset
-    class_freqs = dp.class_counts / float(sum(dp.class_counts))
-    print "Class frequencies:", class_freqs*100
-    # Class frequencies in the sample
-    sample_counts = np.histogram(ytr, range(6))[0]
-    sample_freqs = sample_counts / float(sum(sample_counts))
-    print "Sample frequencies:", sample_freqs*100
-    weights = np.ones(len(ytr))
-    for i in range(5):
-        weights[ytr==i] = class_freqs[i] / sample_freqs[i]
-    #weights = None
+    if stratified:
+        # Class frequencies in the whole dataset
+        class_freqs = dp.class_counts / float(sum(dp.class_counts))
+        print "Class frequencies:", class_freqs*100
+        # Class frequencies in the sample
+        sample_counts = np.histogram(ytr, range(6))[0]
+        sample_freqs = sample_counts / float(sum(sample_counts))
+        print "Sample frequencies:", sample_freqs*100
+        weights = np.ones(len(ytr))
+        for i in range(5):
+            weights[ytr==i] = class_freqs[i] / sample_freqs[i]
+    else:
+        weights = None
     model = train_RF_model(xtr, ytr, n_trees=30, sample_weight=weights)
 
     print "\n----------------------------------\n"
@@ -55,7 +57,7 @@ def predict_RF(train_pats, test_pats, fscores=None, plot_predictions=False,
             pif = None
         pred_probs_te = predict_and_evaluate(
                 model, x, y, coord=coord, dim_list=[dim], plot_confmat=False,
-                ret_probs=True, patient_idxs=None,
+                ret_probs=False, patient_idxs=None,
                 pred_img_fname=pif)
         pred = np.argmax(pred_probs_te, axis=1)
 
@@ -114,7 +116,7 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
             weights[ytr==i] = class_freqs[i] / sample_freqs[i]
     else:
         weights = None
-    model1 = train_RF_model(xtr, ytr1, n_trees=30, sample_weight=weights)
+    model1 = train_RF_model(xtr, ytr1, n_trees=100, sample_weight=weights)
 
     # Train the second model to separate tumor classes
     ok_idxs = ytr > 0
@@ -134,7 +136,7 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
             weights[ytr2==i+1] = class_freqs[i] / sample_freqs[i]
     else:
         weights = None
-    model2 = train_RF_model(xtr2, ytr2, n_trees=30, sample_weight=weights)
+    model2 = train_RF_model(xtr2, ytr2, n_trees=100, sample_weight=weights)
 
     print "\n----------------------------------\n"
 
@@ -149,11 +151,19 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
         x, y, coord, dim = dp.load_patient(te_pat, n_voxels=None)
 
         pred = model1.predict(x)
-        pp_pred = dp.post_process(coord, dim, pred)
+        pp_pred = dp.post_process(coord, dim, pred, binary_closing=True)
 
-        tumor_idxs = pp_pred == 1
+        tumor_idxs = pp_pred > 0
         pred2 = model2.predict(x[tumor_idxs,:])
-        pp_pred15 = pp_pred
+        pp_pred[tumor_idxs] = pred2
+
+        pp_pred15 = np.array(pp_pred)
+        print "\nConfusion matrix:"
+        cm = confusion_matrix(y, pp_pred15)
+        print cm
+        dice_scores(y, pp_pred15, label='Dice scores:')
+
+        pp_pred[tumor_idxs] = dp.post_process(coord[tumor_idxs,:], dim, pred2, remove_components=False)
         '''
         TODO
         pred_probs2 = model2.predict_proba(x[tumor_idxs,:])
@@ -166,8 +176,8 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
 
         pred2 = dp.post_process(coord[tumor_idxs,:], dim, None, pred_probs2) + 1
         print "Unique MRF values:", np.unique(pred2)
-        '''
         pp_pred[tumor_idxs] = pred2
+        '''
 
         print "\nConfusion matrix (pp):"
         cm = confusion_matrix(y, pp_pred)
@@ -176,13 +186,13 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
         yte = np.concatenate((yte, y))
         patient_idxs_te.append(len(yte))
         predte = np.concatenate((predte, pp_pred))
-        #TODOpredte_no_pp = np.concatenate((predte_no_pp, pp_pred15))
+        predte_no_pp = np.concatenate((predte_no_pp, pp_pred15))
 
         dice_scores(y, pp_pred, label='Dice scores (pp):')
 
         if plot_predictions:
             # Plot the patient
-            pif = os.path.join('results', 'pat%d_slices_0_2S.png' % te_pat)
+            pif = os.path.join('results', 'pat%d_slices_0_2S_closing.png' % te_pat)
             pp.plot_predictions(coord, dim, pp_pred15, y, pp_pred, fname=pif)
             #if pred_fname is not None:
             #    extras.save_predictions(coord, dim_list[0], pred, yte, pred_fname)
@@ -191,25 +201,30 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
     cm = confusion_matrix(yte, predte)
     print cm
 
+    dice_scores(yte, predte_no_pp, patient_idxs=patient_idxs_te,
+                label='Overall dice scores (two-stage, no pp):', fscores=fscores)
+
     dice_scores(yte, predte, patient_idxs=patient_idxs_te,
                 label='Overall dice scores (two-stage):', fscores=fscores)
-
-    #TODOdice_scores(yte, predte_no_pp, patient_idxs=patient_idxs_te,
-    #            label='Overall dice scores (two-stage, no MRF):', fscores=fscores)
 
 
 def train_RF_model(xtr, ytr, n_trees=10, sample_weight=None):
     # Train classifier
     t0 = time.time()
-    model = RandomForestClassifier(n_trees, oob_score=True, verbose=1, n_jobs=3)
+    model = RandomForestClassifier(n_trees, oob_score=True, verbose=1, n_jobs=16)
     #model = ExtraTreesClassifier(n_trees, verbose=1, n_jobs=4)
     #model = svm.SVC(C=1000)
     model.fit(xtr, ytr, sample_weight=sample_weight)
     print "Training took %.2f seconds" % (time.time()-t0)
     #print "OOB score: %.2f%%" % (model.oob_score_*100)
+    '''
     print "Feature importances:"
     for i in range(4):
         print model.feature_importances_[i*20:(i+1)*20]
+    '''
+    best_feats = np.argsort(model.feature_importances_)[::-1]
+    print best_feats
+    print model.feature_importances_[best_feats]
     return model
 
 def predict_online(train_pats, test_pats, fscores=None, plot_predictions=False,
@@ -305,7 +320,7 @@ def predict_and_evaluate(model, xte, yte=None, coord=None, dim_list=None,
                 patient_idxs = [0, len(yte)]
             pp.plot_predictions(coord[:patient_idxs[1]], dim_list[0], 
                                 pred[:patient_idxs[1]], yte[:patient_idxs[1]],
-                                pp_pred=pp_pred, fname=pred_img_fname,
+                                pp_pred=pp_pred[:patient_idxs[1]], fname=pred_img_fname,
                                 fpickle=pred_3D_fname)
         if pred_fname is not None:
             extras.save_predictions(coord, dim_list[0], pred, yte, pred_fname)
