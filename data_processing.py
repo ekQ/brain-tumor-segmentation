@@ -108,6 +108,7 @@ def load_patient(number, do_preprocess=True, n_voxels=None, stratified=False):
     row0 = 5
     y = data[row0:, 1]
     x = data[row0:, 5:]
+    print "Features available: %d" % x.shape[1]
     #x = x[:, [19, 18, 10, 0, 79, 9, 70, 69, 8, 15, 60]]
     #x = data[row0:, 5:11]
     #x = data[row0:, [5,11,17,23]]
@@ -152,6 +153,10 @@ def load_patient(number, do_preprocess=True, n_voxels=None, stratified=False):
 
     # Make sure data type is float32 as it might be more memory efficient sklearn.fit
     x = np.asarray(x, dtype=np.float32)
+
+    # Remove bad values
+    print "Max:", x.max(), " Min:", x.min()
+    x[np.isnan(x)] = 0
 
     return x, y, coord, dim
 
