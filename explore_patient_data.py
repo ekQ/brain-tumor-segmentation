@@ -10,7 +10,14 @@ import patient_plotting as pp
 import extras
 import methods
 
+# Experiment parameters
 seed = 98234111
+n_tr_p = 2 # Train patients
+n_de_p = 0 # Development patients
+n_te_p = 1 # Test patients
+stdout2file = False
+plot_predictions = True
+stratified = False
 
 def run_experiment(method):
 
@@ -34,9 +41,6 @@ def run_experiment(method):
     random.shuffle(patients)
     print patients
     #patients = np.random.permutation(193) + 1
-    n_tr_p = 50 # Train patients
-    n_de_p = 0 # Development patients
-    n_te_p = 100 # Test patients
     assert n_tr_p + n_de_p + n_te_p < len(patients), \
             "Not enough patients available"
     #train_patients = patients[:n_tr_p]
@@ -46,8 +50,6 @@ def run_experiment(method):
     train_patients = patients[n_te_p:n_te_p+n_tr_p]
     dev_patients = patients[n_te_p+n_tr_p:n_te_p+n_tr_p+n_de_p]
 
-    plot_predictions = True
-    stratified = False
     if method == 1:
         methods.predict_RF(train_patients, test_patients, fscores,
                            plot_predictions, stratified)
@@ -69,5 +71,6 @@ def main():
 
 if __name__ == "__main__":
     datestr = re.sub('[ :]','',str(dt.datetime.now())[:-7])
-    sys.stdout = open(os.path.join('results', "stdout_%s_seed%d.txt" % (datestr,seed)), 'w')
+    if stdout2file:
+        sys.stdout = open(os.path.join('results', "stdout_%s_seed%d_ntrp%d_ntep%d.txt" % (datestr,seed, n_tr_p, n_te_p)), 'w')
     main()

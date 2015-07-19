@@ -5,12 +5,15 @@ from sklearn.ensemble import ExtraTreesClassifier
 from sklearn.linear_model import PassiveAggressiveClassifier
 from sklearn import svm
 from sklearn.metrics import confusion_matrix
+from sklearn.externals import joblib
 import time
 import os
+import cPickle as pickle
 
 import patient_plotting as pp
 import extras
 import data_processing as dp
+from explore_patient_data import seed
 
 def predict_RF(train_pats, test_pats, fscores=None, plot_predictions=False,
                stratified=False):
@@ -87,7 +90,7 @@ def predict_RF(train_pats, test_pats, fscores=None, plot_predictions=False,
                 label='Overall dice scores (RF):', fscores=fscores)
 
 def predict_two_stage(train_pats, test_pats, fscores=None,
-                      plot_predictions=False, stratified=False):
+                      plot_predictions=False, stratified=False, n_trees=30):
     """
     Predict tumor voxels for given test patients.
 
@@ -96,47 +99,56 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
         test_pats -- list of patient IDs used for testing a model.
         fscores -- An opened output file to which we write the results.
     """
-    xtr, ytr, coordtr, patient_idxs_tr, dims_tr = dp.load_patients(train_pats,
-                                                                   stratified)
-
-    # Make all tumor labels equal to 1 and train the first model
-    ytr1 = np.array(ytr, copy=True)
-    ytr1[ytr1>0] = 1
-    if stratified:
-        # Class frequencies in the whole dataset
-        class_counts = [dp.class_counts[0], sum(dp.class_counts[1:])]
-        class_freqs = np.asarray(class_counts) / float(sum(class_counts))
-        print "Class frequencies (model 1):", class_freqs*100
-        # Class frequencies in the sample
-        sample_counts = np.histogram(ytr, [0,1,5])[0]
-        sample_freqs = sample_counts / float(sum(sample_counts))
-        print "Sample frequencies:", sample_freqs*100
-        weights = np.ones(len(ytr))
-        for i in range(2):
-            weights[ytr==i] = class_freqs[i] / sample_freqs[i]
+    model1_fname = os.path.join('models', 'model1_seed%d_ntrp%d_ntep%d_ntrees%d.jl' %
+                                (seed, len(train_pats), len(test_pats), n_trees))
+    model2_fname = os.path.join('models', 'model2_seed%d_ntrp%d_ntep%d_ntrees%d.jl' %
+                                (seed, len(train_pats), len(test_pats), n_trees))
+    # Load models if available
+    if os.path.isfile(model1_fname) and os.path.isfile(model2_fname):
+        model1 = joblib.load(model1_fname)
+        model2 = joblib.load(model2_fname)
     else:
-        weights = None
-    model1 = train_RF_model(xtr, ytr1, n_trees=100, sample_weight=weights)
+        xtr, ytr, coordtr, patient_idxs_tr, dims_tr = dp.load_patients(train_pats,
+                                                                       stratified)
 
-    # Train the second model to separate tumor classes
-    ok_idxs = ytr > 0
-    xtr2 = np.asarray(xtr[ok_idxs,:])
-    ytr2 = np.asarray(ytr[ok_idxs])
-    if stratified:
-        # Class frequencies in the whole dataset
-        class_counts = dp.class_counts[1:]
-        class_freqs = np.asarray(class_counts) / float(sum(class_counts))
-        print "Class frequencies (model 2):", class_freqs*100
-        # Class frequencies in the sample
-        sample_counts = np.histogram(ytr, range(1,6))[0]
-        sample_freqs = sample_counts / float(sum(sample_counts))
-        print "Sample frequencies:", sample_freqs*100
-        weights = np.ones(len(ytr2))
-        for i in range(4):
-            weights[ytr2==i+1] = class_freqs[i] / sample_freqs[i]
-    else:
-        weights = None
-    model2 = train_RF_model(xtr2, ytr2, n_trees=100, sample_weight=weights)
+        # Make all tumor labels equal to 1 and train the first model
+        ytr1 = np.array(ytr, copy=True)
+        ytr1[ytr1>0] = 1
+        if stratified:
+            # Class frequencies in the whole dataset
+            class_counts = [dp.class_counts[0], sum(dp.class_counts[1:])]
+            class_freqs = np.asarray(class_counts) / float(sum(class_counts))
+            print "Class frequencies (model 1):", class_freqs*100
+            # Class frequencies in the sample
+            sample_counts = np.histogram(ytr, [0,1,5])[0]
+            sample_freqs = sample_counts / float(sum(sample_counts))
+            print "Sample frequencies:", sample_freqs*100
+            weights = np.ones(len(ytr))
+            for i in range(2):
+                weights[ytr==i] = class_freqs[i] / sample_freqs[i]
+        else:
+            weights = None
+        model1 = train_RF_model(xtr, ytr1, n_trees=n_trees, sample_weight=weights, fname=model1_fname)
+
+        # Train the second model to separate tumor classes
+        ok_idxs = ytr > 0
+        xtr2 = np.asarray(xtr[ok_idxs,:])
+        ytr2 = np.asarray(ytr[ok_idxs])
+        if stratified:
+            # Class frequencies in the whole dataset
+            class_counts = dp.class_counts[1:]
+            class_freqs = np.asarray(class_counts) / float(sum(class_counts))
+            print "Class frequencies (model 2):", class_freqs*100
+            # Class frequencies in the sample
+            sample_counts = np.histogram(ytr, range(1,6))[0]
+            sample_freqs = sample_counts / float(sum(sample_counts))
+            print "Sample frequencies:", sample_freqs*100
+            weights = np.ones(len(ytr2))
+            for i in range(4):
+                weights[ytr2==i+1] = class_freqs[i] / sample_freqs[i]
+        else:
+            weights = None
+        model2 = train_RF_model(xtr2, ytr2, n_trees=n_trees, sample_weight=weights, fname=model2_fname)
 
     print "\n----------------------------------\n"
 
@@ -208,14 +220,16 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
                 label='Overall dice scores (two-stage):', fscores=fscores)
 
 
-def train_RF_model(xtr, ytr, n_trees=10, sample_weight=None):
+def train_RF_model(xtr, ytr, n_trees=10, sample_weight=None, fname=None):
     # Train classifier
     t0 = time.time()
     model = RandomForestClassifier(n_trees, oob_score=True, verbose=1, n_jobs=16)
     #model = ExtraTreesClassifier(n_trees, verbose=1, n_jobs=4)
     #model = svm.SVC(C=1000)
     model.fit(xtr, ytr, sample_weight=sample_weight)
-    print "Training took %.2f seconds" % (time.time()-t0)
+    if fname is not None:
+        joblib.dump(model, fname)
+    print "Training/loading took %.2f seconds" % (time.time()-t0)
     #print "OOB score: %.2f%%" % (model.oob_score_*100)
     '''
     print "Feature importances:"
