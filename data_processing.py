@@ -162,7 +162,7 @@ def load_patients(pats, stratified=False):
     patient_idxs_tr = [0]
     dims_tr = []
     for pat in pats:
-        x, y, coord, dim = load_patient(pat, n_voxels=10000,
+        x, y, coord, dim = load_patient(pat, n_voxels=30000,
                                         stratified=stratified)
         ytr = np.concatenate((ytr, y))
         if xtr.shape[0] == 0:
