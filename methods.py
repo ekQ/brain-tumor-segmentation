@@ -204,7 +204,7 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
 
         if plot_predictions:
             # Plot the patient
-            pif = os.path.join('results', 'pat%d_slices_0_2S_closing.png' % te_pat)
+            pif = os.path.join('results', 'pat%d_slices_3k_2S_closing.png' % te_pat)
             pp.plot_predictions(coord, dim, pp_pred15, y, pp_pred, fname=pif)
             #if pred_fname is not None:
             #    extras.save_predictions(coord, dim_list[0], pred, yte, pred_fname)

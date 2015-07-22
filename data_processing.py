@@ -85,7 +85,7 @@ def mrf(coords, probs):
     print "MRF took %.2f seconds." % (time.time()-t0)
     return smoothed_pred
 
-def remove_small_components(D, min_component_size=10):
+def remove_small_components(D, min_component_size=3000):
     t0 = time.time()
     C, n_components = scipy.ndimage.measurements.label(D)
     n_removed = 0
