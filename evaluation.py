@@ -30,3 +30,4 @@ def dice_scores(y, ypred, patient_idxs=None, label='Dice scores:', fscores=None)
     print scores_str
     if fscores is not None:
         fscores.write(scores_str)
+    return ds_mean

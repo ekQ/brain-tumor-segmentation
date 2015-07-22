@@ -12,9 +12,9 @@ import methods
 
 # Experiment parameters
 seed = 98234111
-n_tr_p = 2 # Train patients
-n_de_p = 0 # Development patients
-n_te_p = 1 # Test patients
+n_tr_p = 10 # Train patients
+n_de_p = 10 # Development patients
+n_te_p = 10 # Test patients
 stdout2file = False
 plot_predictions = True
 stratified = False
@@ -55,7 +55,7 @@ def run_experiment(method):
                            plot_predictions, stratified)
     elif method == 2:
         methods.predict_two_stage(train_patients, test_patients, fscores,
-                                  plot_predictions, stratified)
+                                  plot_predictions, stratified, dev_pats=dev_patients)
     elif method == 3:
         methods.predict_online(train_patients, test_patients, fscores,
                                plot_predictions)

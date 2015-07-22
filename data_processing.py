@@ -4,8 +4,7 @@ import time
 import numpy as np
 import os
 import sys
-#sys.path.append("/home/ekku/Documents/work/qcri/miccai/gco_python-master")
-#import pygco
+from pystruct.inference import inference_dispatch, compute_energy
 
 def preprocess(x):
     # Median to zero
@@ -15,10 +14,6 @@ def preprocess(x):
     return x
 
 def post_process(coord, dim, pred, pred_probs=None, remove_components=True, binary_closing=False):
-    if pred_probs is not None:
-        #return mrf(coord, pred_probs)
-        pred = np.argmax(pred_probs, axis=1)
-
     t0 = time.time()
     # 3D data matrix
     D = np.ones((dim[0], dim[1], dim[2]), dtype=int) * -1
@@ -44,11 +39,8 @@ def post_process(coord, dim, pred, pred_probs=None, remove_components=True, bina
     print "Post-processing took %.2f seconds." % (time.time()-t0)
     return np.array(new_pred, dtype=int)
 
-def mrf(coords, probs):
-    assert coords.shape[0] == probs.shape[0], "Length of coordinates (%d) and probs (%d) must be equal." % (coords.shape[0], probs.shape[0])
-    n = probs.shape[0]
-    n_labels = probs.shape[1]
-
+def create_graph(coords):
+    n = coords.shape[0]
     coords = coords.astype(np.int32)
 
     t0 = time.time()
@@ -61,9 +53,7 @@ def mrf(coords, probs):
                 neighs.append(np.array([i,j,k],dtype=np.int32))
     vox_map = {}
     edges = []
-    probs2 = np.zeros(probs.shape)
     for l in range(n):
-        probs2[l,:] = -1 * np.log(probs[l,:])
         coord = coords[l,:]
         coord_tup = tuple(coord)
         assert coord_tup not in vox_map, "Same coordinate appearing twice %s" % str(coord_tup)
@@ -75,13 +65,20 @@ def mrf(coords, probs):
             if coord2_tup in vox_map:
                 edges.append((coord_idx, vox_map[coord2_tup]))
     print "Graph creation took %.2f seconds (%d edges)." % (time.time()-t0, len(edges))
-    probs2 = (100 * probs2).astype(np.int32)
     edges = np.asarray(edges, dtype=np.int32)
+    return edges
 
-    # Potential
-    potential = -1 * np.eye(n_labels, dtype=np.int32)
+def mrf(probs, edges, potential=None):
+    #probs2 = (-100 * np.log(probs)).astype(np.int32)
+    #probs2 = (100 * probs).astype(np.int32)
+    probs2 = probs
+    if potential is None:
+        n_labels = probs2.shape[1]
+        potential = np.eye(n_labels, dtype=np.int32)
+    print "%d labels." % probs2.shape[1]
     t0 = time.time()
-    smoothed_pred = pygco.cut_from_graph(edges, probs2, potential)
+    smoothed_pred = inference_dispatch(probs2, potential, edges,
+                                       inference_method='qpbo')
     print "MRF took %.2f seconds." % (time.time()-t0)
     return smoothed_pred
 
