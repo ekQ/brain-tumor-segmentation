@@ -85,7 +85,7 @@ def mrf(probs, edges, potential=None):
     print "MRF took %.2f seconds." % (time.time()-t0)
     return smoothed_pred
 
-def remove_small_components(D, min_component_size=10):
+def remove_small_components(D, min_component_size=3000):
     t0 = time.time()
     C, n_components = scipy.ndimage.measurements.label(D)
     n_removed = 0
@@ -108,6 +108,7 @@ def load_patient(number, do_preprocess=True, n_voxels=None, stratified=False):
     row0 = 5
     y = data[row0:, 1]
     x = data[row0:, 5:]
+    print "Features available: %d" % x.shape[1]
     #x = x[:, [19, 18, 10, 0, 79, 9, 70, 69, 8, 15, 60]]
     #x = data[row0:, 5:11]
     #x = data[row0:, [5,11,17,23]]
@@ -152,6 +153,10 @@ def load_patient(number, do_preprocess=True, n_voxels=None, stratified=False):
 
     # Make sure data type is float32 as it might be more memory efficient sklearn.fit
     x = np.asarray(x, dtype=np.float32)
+
+    # Remove bad values
+    print "Max:", x.max(), " Min:", x.min()
+    x[np.isnan(x)] = 0
 
     return x, y, coord, dim
 

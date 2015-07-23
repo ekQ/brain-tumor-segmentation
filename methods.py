@@ -224,8 +224,8 @@ def optimize_potential(dev_pats, model1, model2, stratified, fscores=None,
                        do_plot_predictions=False):
     n_labels = 4
     potentials = []
-    #factors = [0.001, 0.005, 0.01, 0.02, 0.05, 0.1]
     factors = [0, 0.001, 0.01, 0.1]
+    #factors = [0.005, 0.01, 0.02, 0.05, 0.1, 0.5, 1]
     for f in factors:
         potentials.append(f * np.eye(n_labels))
     n_pots = len(potentials)
