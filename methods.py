@@ -15,7 +15,7 @@ import extras
 import data_processing as dp
 from explore_patient_data import seed
 
-def predict_RF(train_pats, test_pats, fscores=None, plot_predictions=False,
+def predict_RF(train_pats, test_pats, fscores=None, do_plot_predictions=False,
                stratified=False):
     """
     Predict tumor voxels for given test patients.
@@ -54,7 +54,7 @@ def predict_RF(train_pats, test_pats, fscores=None, plot_predictions=False,
         print "Test patient number %d" % (te_idx+1)
         x, y, coord, dim = dp.load_patient(te_pat, n_voxels=None)
 
-        if plot_predictions:
+        if do_plot_predictions:
             pif = os.path.join('plots', 'pat%d_slices_0_RF.png' % te_pat)
         else:
             pif = None
@@ -90,7 +90,8 @@ def predict_RF(train_pats, test_pats, fscores=None, plot_predictions=False,
                 label='Overall dice scores (RF):', fscores=fscores)
 
 def predict_two_stage(train_pats, test_pats, fscores=None,
-                      plot_predictions=False, stratified=False, n_trees=30):
+                      do_plot_predictions=False, stratified=False, n_trees=30,
+                      dev_pats=[], use_mrf=True):
     """
     Predict tumor voxels for given test patients.
 
@@ -152,6 +153,11 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
 
     print "\n----------------------------------\n"
 
+    if len(dev_pats) > 0:
+        best_potential = optimize_potential(
+                dev_pats, model1, model2, stratified, fscores,
+                do_plot_predictions)
+
     yte = np.zeros(0)
     predte = np.zeros(0)
     predte_no_pp = np.zeros(0)
@@ -166,30 +172,25 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
         pp_pred = dp.post_process(coord, dim, pred, binary_closing=True)
 
         tumor_idxs = pp_pred > 0
-        pred2 = model2.predict(x[tumor_idxs,:])
-        pp_pred[tumor_idxs] = pred2
-
-        pp_pred15 = np.array(pp_pred)
-        print "\nConfusion matrix:"
-        cm = confusion_matrix(y, pp_pred15)
-        print cm
-        dice_scores(y, pp_pred15, label='Dice scores:')
-
-        pp_pred[tumor_idxs] = dp.post_process(coord[tumor_idxs,:], dim, pred2, remove_components=False)
-        '''
-        TODO
         pred_probs2 = model2.predict_proba(x[tumor_idxs,:])
+        pred2 = np.argmax(pred_probs2, axis=1) + 1
+        pp_pred[tumor_idxs] = pred2
+
         pp_pred15 = np.array(pp_pred)
-        pp_pred15[tumor_idxs] = np.argmax(pred_probs2, axis=1) + 1
         print "\nConfusion matrix:"
         cm = confusion_matrix(y, pp_pred15)
         print cm
         dice_scores(y, pp_pred15, label='Dice scores:')
 
-        pred2 = dp.post_process(coord[tumor_idxs,:], dim, None, pred_probs2) + 1
-        print "Unique MRF values:", np.unique(pred2)
-        pp_pred[tumor_idxs] = pred2
-        '''
+        if use_mrf:
+            # MRF post processing
+            edges = dp.create_graph(coord[tumor_idxs,:])
+            pp_pred[tumor_idxs] = dp.mrf(pred_probs2, edges, potential=best_potential) + 1
+            method = 'MRF'
+        else:
+            # Closing post processing
+            pp_pred[tumor_idxs] = dp.post_process(coord[tumor_idxs,:], dim, pred2, remove_components=False)
+            method = 'closing'
 
         print "\nConfusion matrix (pp):"
         cm = confusion_matrix(y, pp_pred)
@@ -202,9 +203,9 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
 
         dice_scores(y, pp_pred, label='Dice scores (pp):')
 
-        if plot_predictions:
+        if do_plot_predictions:
             # Plot the patient
-            pif = os.path.join('results', 'pat%d_slices_3k_2S_closing.png' % te_pat)
+            pif = os.path.join('results', 'pat%d_slices_2S_%s.png' % (te_pat, method))
             pp.plot_predictions(coord, dim, pp_pred15, y, pp_pred, fname=pif)
             #if pred_fname is not None:
             #    extras.save_predictions(coord, dim_list[0], pred, yte, pred_fname)
@@ -219,6 +220,84 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
     dice_scores(yte, predte, patient_idxs=patient_idxs_te,
                 label='Overall dice scores (two-stage):', fscores=fscores)
 
+def optimize_potential(dev_pats, model1, model2, stratified, fscores=None,
+                       do_plot_predictions=False):
+    n_labels = 4
+    potentials = []
+    factors = [0.005, 0.01, 0.02, 0.05, 0.1, 0.5, 1]
+    for f in factors:
+        potentials.append(f * np.eye(n_labels))
+    n_pots = len(potentials)
+
+    yde = np.zeros(0)
+    predde = np.zeros((0, n_pots))
+    predde_no_pp = np.zeros(0)
+    patient_idxs_de = [0]
+    print "Development users:"
+    # Iterate over dev users
+    for de_idx, de_pat in enumerate(dev_pats):
+        print "Development patient number %d" % (de_idx+1)
+        x, y, coord, dim = dp.load_patient(de_pat, n_voxels=None)
+        yde = np.concatenate((yde, y))
+        patient_idxs_de.append(len(yde))
+
+        pred = model1.predict(x)
+        pp_pred = dp.post_process(coord, dim, pred, binary_closing=True)
+
+        tumor_idxs = pp_pred > 0
+        pred_probs2 = model2.predict_proba(x[tumor_idxs,:])
+        pred2 = np.argmax(pred_probs2, axis=1) + 1
+        pp_pred[tumor_idxs] = pred2
+
+        pp_pred15 = np.array(pp_pred)
+        print "\nConfusion matrix (dev):"
+        cm = confusion_matrix(y, pp_pred15)
+        print cm
+        dice_scores(y, pp_pred15, label='Dice scores (dev, no MRF):')
+        predde_no_pp = np.concatenate((predde_no_pp, pp_pred15))
+        predde_part = np.zeros((len(pp_pred15), 0))
+
+        edges = dp.create_graph(coord[tumor_idxs,:])
+        for pi, pot in enumerate(potentials):
+            print "  Patient %d, potential %d." % (de_idx+1, pi+1)
+            pp_pred[tumor_idxs] = dp.mrf(pred_probs2, edges, potential=pot) + 1
+
+            print "\nConfusion matrix (MRF-%d):" % (pi+1)
+            cm = confusion_matrix(y, pp_pred)
+            print cm
+
+            predde_part = np.hstack((predde_part, pp_pred.reshape(len(pp_pred),1)))
+
+            dice_scores(y, pp_pred, label='Dice scores (pp):')
+
+            if do_plot_predictions:
+                # Plot the patient
+                pif = os.path.join('plots', 'validation', 'pat%d_slices_2S_MRF-%d.png' % (de_pat,pi+1))
+                pp.plot_predictions(coord, dim, pp_pred15, y, pp_pred, fname=pif)
+                #if pred_fname is not None:
+                #    extras.save_predictions(coord, dim_list[0], pred, yte, pred_fname)
+        predde = np.vstack((predde, predde_part))
+
+    dice_scores(yde, predde_no_pp, patient_idxs=patient_idxs_de,
+                label='Overall dice scores (two-stage, no MRF):', fscores=fscores)
+
+    best_potential = potentials[0]
+    best_score = -1
+    for i in range(n_pots):
+        print "\nOverall confusion matrix (%d):" % i
+        cm = confusion_matrix(yde, predde[:,i])
+        print cm
+
+        ds = dice_scores(yde, predde[:,i], patient_idxs=patient_idxs_de,
+                         label='Overall dice scores (two-stage, MRF-%d):' % i,
+                         fscores=fscores)
+        score = sum(ds)
+        if score > best_score:
+            best_score = score
+            best_potential = potentials[i]
+    print "Best potential (score=%f):" % (best_score)
+    print best_potential
+    return best_potential
 
 def train_RF_model(xtr, ytr, n_trees=10, sample_weight=None, fname=None):
     # Train classifier
@@ -241,7 +320,7 @@ def train_RF_model(xtr, ytr, n_trees=10, sample_weight=None, fname=None):
     print model.feature_importances_[best_feats]
     return model
 
-def predict_online(train_pats, test_pats, fscores=None, plot_predictions=False,
+def predict_online(train_pats, test_pats, fscores=None, do_plot_predictions=False,
                    stratified=False):
     """
     Predict tumor voxels for given test patients.
@@ -271,7 +350,7 @@ def predict_online(train_pats, test_pats, fscores=None, plot_predictions=False,
         print "Test patient number %d" % (te_idx+1)
         x, y, coord, dim = dp.load_patient(te_pat, n_voxels=None)
 
-        if plot_predictions:
+        if do_plot_predictions:
             pif = os.path.join('plots', 'pat%d_slices_0_online.png' % te_pat)
         else:
             pif = None
