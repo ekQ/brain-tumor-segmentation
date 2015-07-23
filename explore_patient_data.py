@@ -12,9 +12,9 @@ import methods
 
 # Experiment parameters
 seed = 98234111
-n_tr_p = 10 # Train patients
-n_de_p = 10 # Development patients
-n_te_p = 10 # Test patients
+n_tr_p = 2 # Train patients
+n_de_p = 1 # Development patients
+n_te_p = 1 # Test patients
 stdout2file = False
 plot_predictions = True
 stratified = False
@@ -40,15 +40,11 @@ def run_experiment(method):
             patients.append(int(m.group(1)))
     random.shuffle(patients)
     print patients
-    #patients = np.random.permutation(193) + 1
     assert n_tr_p + n_de_p + n_te_p < len(patients), \
             "Not enough patients available"
-    #train_patients = patients[:n_tr_p]
-    #test_patients = patients[n_tr_p:n_tr_p+n_te_p]
-    #dev_patients = patients[n_tr_p+n_te_p:n_tr_p+n_te_p+n_de_p]
-    test_patients = patients[:n_te_p]
+    test_patients = [36]#patients[:n_te_p]
     train_patients = patients[n_te_p:n_te_p+n_tr_p]
-    dev_patients = patients[n_te_p+n_tr_p:n_te_p+n_tr_p+n_de_p]
+    dev_patients = [28]#patients[n_te_p+n_tr_p:n_te_p+n_tr_p+n_de_p]
 
     if method == 1:
         methods.predict_RF(train_patients, test_patients, fscores,
