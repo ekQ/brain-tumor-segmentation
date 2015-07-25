@@ -226,8 +226,17 @@ def optimize_potential(dev_pats, model1, model2, stratified, fscores=None,
     potentials = []
     factors = [0.001, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.3, 0.5]
     #factors = [0.00001, 0.0001, 0.001, 0.01, 0.02, 0.05, 0.1]
+    # Quadratic potential
+    order = [2,1,3,4]
+    pot_mat = np.zeros((n_labels, n_labels))
+    for i in range(len(order)):
+        for j in range(len(order)):
+            pot_mat[i,j] = np.abs(order[i] - order[j])**2
+    max_val = np.max(pot_mat[:])
+    pot_mat = (pot_mat - max_val) / max_val
     for f in factors:
-        potentials.append(f * np.eye(n_labels))
+        #potentials.append(f * np.eye(n_labels))
+        potentials.append(f * pot_mat)
     n_pots = len(potentials)
 
     yde = np.zeros(0)
