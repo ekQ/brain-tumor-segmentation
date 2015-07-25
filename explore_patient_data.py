@@ -15,9 +15,9 @@ seed = 98234111
 n_tr_p = 50 # Train patients
 n_de_p = 25 # Development patients
 n_te_p = 100 # Test patients
-stdout2file = False
+stdout2file = True
 n_trees = 30
-plot_predictions = True
+plot_predictions = False
 stratified = False
 
 def run_experiment(method):
@@ -49,9 +49,9 @@ def run_experiment(method):
     print patients
     assert n_tr_p + n_de_p + n_te_p < len(patients), \
             "Not enough patients available"
-    test_patients = [36]#patients[:n_te_p]
+    test_patients = patients[:n_te_p]
     train_patients = patients[n_te_p:n_te_p+n_tr_p]
-    dev_patients = [28]#patients[n_te_p+n_tr_p:n_te_p+n_tr_p+n_de_p]
+    dev_patients = patients[n_te_p+n_tr_p:n_te_p+n_tr_p+n_de_p]
 
     if method == 1:
         methods.predict_RF(train_patients, test_patients, fscores,

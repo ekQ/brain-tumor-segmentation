@@ -71,10 +71,10 @@ def create_graph(coords):
 def mrf(probs, edges, potential=None):
     #probs2 = (-100 * np.log(probs)).astype(np.int32)
     #probs2 = (100 * probs).astype(np.int32)
-    min_prob = 0.001
+    #min_prob = 0.001
     probs2 = np.array(probs)
-    probs2[probs2 < min_prob] = min_prob
-    probs2 = np.log(probs2)
+    #probs2[probs2 < min_prob] = min_prob
+    #probs2 = np.log(probs2)
     if potential is None:
         n_labels = probs2.shape[1]
         potential = np.eye(n_labels, dtype=np.int32)
