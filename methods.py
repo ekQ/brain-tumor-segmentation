@@ -224,7 +224,7 @@ def optimize_potential(dev_pats, model1, model2, stratified, fscores=None,
                        do_plot_predictions=False):
     n_labels = 4
     potentials = []
-    factors = [0.001, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.3, 0.5]
+    factors = [0.01, 0.02, 0.05, 0.1, 0.2, 0.3, 0.5, 1, 2]
     #factors = [0.00001, 0.0001, 0.001, 0.01, 0.02, 0.05, 0.1]
     # Quadratic potential
     order = [2,1,3,4]
@@ -233,7 +233,7 @@ def optimize_potential(dev_pats, model1, model2, stratified, fscores=None,
         for j in range(len(order)):
             pot_mat[i,j] = np.abs(order[i] - order[j])**2
     max_val = np.max(pot_mat[:])
-    pot_mat = (pot_mat - max_val) / max_val
+    pot_mat = (max_val - pot_mat) / max_val
     for f in factors:
         #potentials.append(f * np.eye(n_labels))
         potentials.append(f * pot_mat)
@@ -280,9 +280,9 @@ def optimize_potential(dev_pats, model1, model2, stratified, fscores=None,
 
             dice_scores(y, pp_pred, label='Dice scores (pp):')
 
-            if do_plot_predictions:
+            if do_plot_predictions or pi < 5:
                 # Plot the patient
-                pif = os.path.join('plots', 'validation', 'pat%d_slices_2S_MRF-%d.png' % (de_pat,pi+1))
+                pif = os.path.join('plots', 'validation2', 'pat%d_slices_2S_MRF-%d.png' % (de_pat,pi+1))
                 pp.plot_predictions(coord, dim, pp_pred15, y, pp_pred, fname=pif)
                 #if pred_fname is not None:
                 #    extras.save_predictions(coord, dim_list[0], pred, yte, pred_fname)
