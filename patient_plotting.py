@@ -91,7 +91,7 @@ def plot_predictions(coord, dim, pred, gt=None, pp_pred=None, fname=None, fpickl
     if fpickle is not None:
         with open(fpickle, 'wb') as fp:
             pickle.dump(D, fp)
-    print "Done.\n"
+    print "Done (%s).\n" % fname
 
 def save_pred_probs_csv(coord, dim, pred_probs, fname):
     X = np.hstack((coord, pred_probs))
