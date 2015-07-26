@@ -129,7 +129,9 @@ def post_process_multi_radii(coord, dim, pred, radii, y=None,
         all_preds.append(new_pred)
         # Evaluation
         if y is not None:
-            dice_scores(y, new_pred, patient_idxs=None,
+            temp_pred = np.array(new_pred)
+            temp_pred[temp_pred==1] = 2
+            dice_scores(y, temp_pred, patient_idxs=None,
                         label='Dice scores (r=%d):' % r)
 
     ret = np.zeros((len(all_preds[0]), len(all_preds)))
@@ -137,7 +139,7 @@ def post_process_multi_radii(coord, dim, pred, radii, y=None,
         ret[:,i] = pred
 
     print "Post-processing took %.2f seconds." % (time.time()-t0)
-    return np.asarray(pred, dtype=int)
+    return np.asarray(ret, dtype=int)
 
 class_counts = np.zeros(5)
 

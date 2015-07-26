@@ -244,7 +244,7 @@ def train_RF_model(xtr, ytr, n_trees=10, sample_weight=None, fname=None):
     return model
 
 def optimize_closing(dev_pats, model1, stratified, fscores=None):
-    radii = [1, 3, 5, 6, 7, 10, 15, 20, 30]
+    radii = [1, 3, 5, 6, 7, 10, 15]#, 20, 30]
     nr = len(radii)
 
     yde = np.zeros(0)
@@ -264,7 +264,7 @@ def optimize_closing(dev_pats, model1, stratified, fscores=None):
 
         predde_no_pp = np.concatenate((predde_no_pp, pred))
         predde_part = dp.post_process_multi_radii(
-                coord, dim, pred, y, radii, remove_components=True,
+                coord, dim, pred, radii, y, remove_components=True,
                 binary_closing=True)
         predde = np.vstack((predde, predde_part))
 
@@ -273,13 +273,13 @@ def optimize_closing(dev_pats, model1, stratified, fscores=None):
 
     best_r = radii[0]
     best_score = -1
-    for i in range(n_pots):
-        print "\nOverall confusion matrix (%d):" % i
+    for i in range(nr):
+        print "\nOverall confusion matrix (r=%d):" % radii[i]
         cm = confusion_matrix(yde, predde[:,i])
         print cm
 
         ds = dice_scores(yde, predde[:,i], patient_idxs=patient_idxs_de,
-                         label='Overall dice scores (two-stage, MRF-%d):' % i,
+                         label='Overall dice scores (two-stage, r=%d):' % radii[i],
                          fscores=fscores)
         score = sum(ds)
         if score > best_score:
@@ -348,7 +348,7 @@ def optimize_potential(dev_pats, model1, model2, stratified, fscores=None,
 
             dice_scores(y, pp_pred, label='Dice scores (pp):')
 
-            if do_plot_predictions or pi < 5:
+            if do_plot_predictions or de_idx < 5:
                 # Plot the patient
                 pif = os.path.join('plots', 'validation2', 'pat%d_slices_2S_MRF-%d.png' % (de_pat,pi+1))
                 pp.plot_predictions(coord, dim, pp_pred15, y, pp_pred, fname=pif)
