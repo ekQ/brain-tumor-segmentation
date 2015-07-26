@@ -6,6 +6,8 @@ import os
 import sys
 from pystruct.inference import inference_dispatch, compute_energy
 
+from evaluation import dice_scores
+
 def preprocess(x):
     # Median to zero
     x -= np.median(x,0)
@@ -13,14 +15,15 @@ def preprocess(x):
     x /= np.std(x,0)
     return x
 
-def post_process(coord, dim, pred, pred_probs=None, remove_components=True, binary_closing=False):
+def post_process(coord, dim, pred, pred_probs=None, remove_components=True,
+                 binary_closing=False, radius=6):
     t0 = time.time()
     # 3D data matrix
     D = np.ones((dim[0], dim[1], dim[2]), dtype=int) * -1
     for i in range(coord.shape[0]):
         D[coord[i,0], coord[i,1], coord[i,2]] = pred[i]
     
-    neighborhood = skimage.morphology.ball(6)
+    neighborhood = skimage.morphology.ball(radius)
     
     if binary_closing:
         D2 = D > 0
@@ -95,6 +98,46 @@ def remove_small_components(D, min_component_size=3000):
             D[component] = 0
             n_removed += 1
     print "Removed %d out of %d components (%.2f seconds)." % (n_removed, n_components, time.time()-t0)
+
+def post_process_multi_radii(coord, dim, pred, radii, y=None,
+                             remove_components=True, binary_closing=False):
+    t0 = time.time()
+    # 3D data matrix
+    D_orig = np.ones((dim[0], dim[1], dim[2]), dtype=int) * -1
+    for i in range(coord.shape[0]):
+        D_orig[coord[i,0], coord[i,1], coord[i,2]] = pred[i]
+
+    all_preds = []
+    for r in radii:
+        D = np.array(D_orig) # Copy array
+        neighborhood = skimage.morphology.ball(r)
+
+        if binary_closing:
+            D2 = D > 0
+            D = skimage.morphology.binary_closing(D2, neighborhood)
+            #D[D3==0] = 0
+            #D[np.logical_and(D==0, D3==1)] = 2
+        else:
+            D = skimage.morphology.closing(D, neighborhood)
+
+        if remove_components:
+            remove_small_components(D)
+
+        new_pred = []
+        for i in range(coord.shape[0]):
+            new_pred.append(D[coord[i,0], coord[i,1], coord[i,2]])
+        all_preds.append(new_pred)
+        # Evaluation
+        if y is not None:
+            dice_scores(y, new_pred, patient_idxs=None,
+                        label='Dice scores (r=%d):' % r)
+
+    ret = np.zeros((len(all_preds[0]), len(all_preds)))
+    for i, pred in enumerate(all_preds):
+        ret[:,i] = pred
+
+    print "Post-processing took %.2f seconds." % (time.time()-t0)
+    return np.asarray(pred, dtype=int)
 
 class_counts = np.zeros(5)
 

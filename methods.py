@@ -154,9 +154,11 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
     print "\n----------------------------------\n"
 
     if len(dev_pats) > 0:
-        best_potential = optimize_potential(
-                dev_pats, model1, model2, stratified, fscores,
-                do_plot_predictions)
+        #best_potential = optimize_potential(
+        #        dev_pats, model1, model2, stratified, fscores,
+        #        do_plot_predictions)
+        best_radius = optimize_closing(dev_pats, model1, stratified, fscores)
+
 
     yte = np.zeros(0)
     predte = np.zeros(0)
@@ -219,6 +221,72 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
 
     dice_scores(yte, predte, patient_idxs=patient_idxs_te,
                 label='Overall dice scores (two-stage):', fscores=fscores)
+
+def train_RF_model(xtr, ytr, n_trees=10, sample_weight=None, fname=None):
+    # Train classifier
+    t0 = time.time()
+    model = RandomForestClassifier(n_trees, oob_score=True, verbose=1, n_jobs=16)
+    #model = ExtraTreesClassifier(n_trees, verbose=1, n_jobs=4)
+    #model = svm.SVC(C=1000)
+    model.fit(xtr, ytr, sample_weight=sample_weight)
+    if fname is not None:
+        joblib.dump(model, fname)
+    print "Training/loading took %.2f seconds" % (time.time()-t0)
+    #print "OOB score: %.2f%%" % (model.oob_score_*100)
+    '''
+    print "Feature importances:"
+    for i in range(4):
+        print model.feature_importances_[i*20:(i+1)*20]
+    '''
+    best_feats = np.argsort(model.feature_importances_)[::-1]
+    print best_feats
+    print model.feature_importances_[best_feats]
+    return model
+
+def optimize_closing(dev_pats, model1, stratified, fscores=None):
+    radii = [1, 3, 5, 6, 7, 10, 15, 20, 30]
+    nr = len(radii)
+
+    yde = np.zeros(0)
+    predde = np.zeros((0, nr))
+    predde_no_pp = np.zeros(0)
+    patient_idxs_de = [0]
+    print "Development users:"
+    # Iterate over dev users
+    for de_idx, de_pat in enumerate(dev_pats):
+        print "Development patient number %d" % (de_idx+1)
+        x, y, coord, dim = dp.load_patient(de_pat, n_voxels=None)
+        yde = np.concatenate((yde, y))
+        patient_idxs_de.append(len(yde))
+
+        pred = model1.predict(x)
+        dice_scores(y, pred, label='Dice scores (dev, no closing):')
+
+        predde_no_pp = np.concatenate((predde_no_pp, pred))
+        predde_part = dp.post_process_multi_radii(
+                coord, dim, pred, y, radii, remove_components=True,
+                binary_closing=True)
+        predde = np.vstack((predde, predde_part))
+
+    dice_scores(yde, predde_no_pp, patient_idxs=patient_idxs_de,
+                label='Overall dice scores (two-stage, no MRF):', fscores=fscores)
+
+    best_r = radii[0]
+    best_score = -1
+    for i in range(n_pots):
+        print "\nOverall confusion matrix (%d):" % i
+        cm = confusion_matrix(yde, predde[:,i])
+        print cm
+
+        ds = dice_scores(yde, predde[:,i], patient_idxs=patient_idxs_de,
+                         label='Overall dice scores (two-stage, MRF-%d):' % i,
+                         fscores=fscores)
+        score = sum(ds)
+        if score > best_score:
+            best_score = score
+            best_r = radii[i]
+    print "Best r=%d, score=%f:" % (best_r, best_score)
+    return best_r
 
 def optimize_potential(dev_pats, model1, model2, stratified, fscores=None,
                        do_plot_predictions=False):
