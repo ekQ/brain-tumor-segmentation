@@ -157,7 +157,7 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
         #best_potential = optimize_potential(
         #        dev_pats, model1, model2, stratified, fscores,
         #        do_plot_predictions)
-        best_radius = optimize_closing(dev_pats, model1, stratified, fscores)
+        best_radius = 1#optimize_closing(dev_pats, model1, stratified, fscores)
 
 
     yte = np.zeros(0)
@@ -171,7 +171,7 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
         x, y, coord, dim = dp.load_patient(te_pat, n_voxels=None)
 
         pred = model1.predict(x)
-        pp_pred = dp.post_process(coord, dim, pred, binary_closing=True)
+        pp_pred = dp.post_process(coord, dim, pred, binary_closing=True, radius=best_radius)
 
         tumor_idxs = pp_pred > 0
         pred_probs2 = model2.predict_proba(x[tumor_idxs,:])
@@ -191,7 +191,7 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
             method = 'MRF'
         else:
             # Closing post processing
-            pp_pred[tumor_idxs] = dp.post_process(coord[tumor_idxs,:], dim, pred2, remove_components=False)
+            pp_pred[tumor_idxs] = dp.post_process(coord[tumor_idxs,:], dim, pred2, remove_components=False, radius=best_radius)
             method = 'closing'
 
         print "\nConfusion matrix (pp):"
