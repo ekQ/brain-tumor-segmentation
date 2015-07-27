@@ -87,6 +87,6 @@ def main():
 if __name__ == "__main__":
     datestr = re.sub('[ :]','',str(dt.datetime.now())[:-7])
     if stdout2file:
-        sys.stdout = open(os.path.join('results', "stdout_%s_seed%d_ntrp%d_ntep%d.txt" % (datestr,seed, n_tr_p, n_te_p)), 'w')
-        sys.stderr = open(os.path.join('results', "stderr_%s_seed%d_ntrp%d_ntep%d.txt" % (datestr,seed, n_tr_p, n_te_p)), 'w')
+        sys.stdout = open(os.path.join('results', "stdout_%s_seed%d_ntrp%d_ntep%d_res%d.txt" % (datestr,seed, n_tr_p, n_te_p, resolution)), 'w')
+        sys.stderr = open(os.path.join('results', "stderr_%s_seed%d_ntrp%d_ntep%d_res%d.txt" % (datestr,seed, n_tr_p, n_te_p, resolution)), 'w')
     main()

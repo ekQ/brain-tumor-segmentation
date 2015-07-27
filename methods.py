@@ -100,10 +100,13 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
         test_pats -- list of patient IDs used for testing a model.
         fscores -- An opened output file to which we write the results.
     """
-    model1_fname = os.path.join('models', 'model1_seed%d_ntrp%d_ntep%d_ntrees%d.jl' %
-                                (seed, len(train_pats), len(test_pats), n_trees))
-    model2_fname = os.path.join('models', 'model2_seed%d_ntrp%d_ntep%d_ntrees%d.jl' %
-                                (seed, len(train_pats), len(test_pats), n_trees))
+    model_str = ""
+    if resolution != 1:
+        model_str += '_res%d' % resolution
+    model1_fname = os.path.join('models', 'model1_seed%d_ntrp%d_ntep%d_ntrees%d%s.jl' %
+                                (seed, len(train_pats), len(test_pats), n_trees, model_str))
+    model2_fname = os.path.join('models', 'model2_seed%d_ntrp%d_ntep%d_ntrees%d%s.jl' %
+                                (seed, len(train_pats), len(test_pats), n_trees, model_str))
     # Load models if available
     if os.path.isfile(model1_fname) and os.path.isfile(model2_fname):
         model1 = joblib.load(model1_fname)
