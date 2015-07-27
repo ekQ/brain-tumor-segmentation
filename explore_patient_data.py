@@ -12,10 +12,10 @@ import methods
 
 # Experiment parameters
 seed = 98234111
-n_tr_p = 50 # Train patients
-n_de_p = 25 # Development patients
+n_tr_p = 100 # Train patients
+n_de_p = 0 # Development patients
 n_te_p = 100 # Test patients
-stdout2file = False
+stdout2file = True
 n_trees = 30
 plot_predictions = False
 stratified = False
