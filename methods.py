@@ -100,9 +100,9 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
         test_pats -- list of patient IDs used for testing a model.
         fscores -- An opened output file to which we write the results.
     """
-    model1_fname = os.path.join('models', 'model1_seed%d_ntrp%d_ntep%d_ntrees%d.jl' %
+    model1_fname = os.path.join('models', 'model1_seed%d_ntrp%d_ntep%d_ntrees%d_w.jl' %
                                 (seed, len(train_pats), len(test_pats), n_trees))
-    model2_fname = os.path.join('models', 'model2_seed%d_ntrp%d_ntep%d_ntrees%d.jl' %
+    model2_fname = os.path.join('models', 'model2_seed%d_ntrp%d_ntep%d_ntrees%d_w.jl' %
                                 (seed, len(train_pats), len(test_pats), n_trees))
     # Load models if available
     if os.path.isfile(model1_fname) and os.path.isfile(model2_fname):
@@ -157,7 +157,9 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
         #best_potential = optimize_potential(
         #        dev_pats, model1, model2, stratified, fscores,
         #        do_plot_predictions)
-        best_radius = optimize_closing(dev_pats, model1, stratified, fscores)
+        best_radius = 6#optimize_closing(dev_pats, model1, stratified, fscores)
+    else:
+        best_radius = 6
 
 
     yte = np.zeros(0)
@@ -171,7 +173,7 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
         x, y, coord, dim = dp.load_patient(te_pat, n_voxels=None)
 
         pred = model1.predict(x)
-        pp_pred = dp.post_process(coord, dim, pred, binary_closing=True)
+        pp_pred = dp.post_process(coord, dim, pred, binary_closing=True, radius=best_radius)
 
         tumor_idxs = pp_pred > 0
         pred_probs2 = model2.predict_proba(x[tumor_idxs,:])
@@ -191,7 +193,7 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
             method = 'MRF'
         else:
             # Closing post processing
-            pp_pred[tumor_idxs] = dp.post_process(coord[tumor_idxs,:], dim, pred2, remove_components=False)
+            pp_pred[tumor_idxs] = dp.post_process(coord[tumor_idxs,:], dim, pred2, remove_components=False, radius=best_radius)
             method = 'closing'
 
         print "\nConfusion matrix (pp):"
@@ -225,7 +227,7 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
 def train_RF_model(xtr, ytr, n_trees=10, sample_weight=None, fname=None):
     # Train classifier
     t0 = time.time()
-    model = RandomForestClassifier(n_trees, oob_score=True, verbose=1, n_jobs=16)
+    model = RandomForestClassifier(n_trees, oob_score=True, verbose=1, n_jobs=16, class_weight='auto')
     #model = ExtraTreesClassifier(n_trees, verbose=1, n_jobs=4)
     #model = svm.SVC(C=1000)
     model.fit(xtr, ytr, sample_weight=sample_weight)
