@@ -244,7 +244,7 @@ def train_RF_model(xtr, ytr, n_trees=10, sample_weight=None, fname=None):
     return model
 
 def optimize_closing(dev_pats, model1, stratified, fscores=None):
-    radii = [1, 3, 5, 6, 7, 10, 15]#, 20, 30]
+    radii = [1,2,3,4,5,6,7,8,9,10]
     nr = len(radii)
 
     yde = np.zeros(0)
