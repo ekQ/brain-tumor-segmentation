@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib import colors
 import cPickle as pickle
+import data_processing as dp;
 
 def plot_cm(cm, title='Confusion matrix', cmap=plt.cm.Blues):
     plt.imshow(cm, interpolation='nearest', cmap=cmap)
@@ -23,6 +24,19 @@ def plot_confusion_matrix(cm):
     plt.subplot(122)
     plot_cm(cm_normalized, title='Normalized confusion matrix')
 
+def plot_full_feature_scatter_matrix(X,Y,fname='scatter_matrix_full_feature.png'):
+	import pandas as pd;
+	from pandas.tools.plotting import scatter_matrix;
+	COL = ['VAR1', 'VAR2', 'VAR3', 'VAR4', 'VAR5', 'VAR6', 'VAR7', 'VAR8', 'VAR9', 'VAR10', 'VAR11', 'VAR12', 'VAR13', 'VAR14', 'VAR15', 'VAR16', 'VAR17', 'VAR18', 'VAR19', 'VAR20', 'label'];
+	df = pd.DataFrame(np.hstack((X,Y.reshape(len(y),1))), columns=COL);
+	df['label'] = df['label'].astype(int);
+	R = list(np.linspace(0,1,num=25));
+	G = list(np.linspace(1,0,num=25));
+	B = list(np.linspace(0,1,num=25));
+	import matplotlib.pyplot as plt;
+	scatter_matrix(df,figsize=[20,20], marker='x',diagonal='kde',c=df.label.apply(lambda k:(R[k],G[k],B[k])));
+	plt.savefig(fname);
+	
 def plot_scatter_matrix(x,y,fname='scatter_matrix.png'):
     import pandas as pd
     from pandas.tools.plotting import scatter_matrix
