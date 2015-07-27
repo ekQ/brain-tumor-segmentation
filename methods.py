@@ -91,7 +91,7 @@ def predict_RF(train_pats, test_pats, fscores=None, do_plot_predictions=False,
 
 def predict_two_stage(train_pats, test_pats, fscores=None,
                       do_plot_predictions=False, stratified=False, n_trees=30,
-                      dev_pats=[], use_mrf=True):
+                      dev_pats=[], use_mrf=True, resolution=1):
     """
     Predict tumor voxels for given test patients.
 

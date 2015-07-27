@@ -19,6 +19,7 @@ stdout2file = False
 n_trees = 30
 plot_predictions = False
 stratified = False
+resolution = 2 # 1/2/4, 1 is the highest, 2 is 2^3 times smaller
 
 def run_experiment(method):
     # Plot parameters to store them to output log
@@ -27,6 +28,7 @@ def run_experiment(method):
     print "n_te_p", n_te_p
     print "n_de_p", n_de_p
     print "n_trees", n_trees
+    print "resolution", resolution
 
     method_names = {1:'RF', 2:'two-stage', 3:'online'}
     datestr = re.sub('[ :]','',str(dt.datetime.now())[:-7])
@@ -39,10 +41,18 @@ def run_experiment(method):
     random.seed(seed)
 
     t_beg = time.time()
+    if resolution == 1:
+        pat_fname = "Patient_Features_(\d+)\.mat"
+    elif resolution == 2:
+        pat_fname = "Patient_Features_SubsampleX2_(\d+)\.mat"
+    elif resolution == 4:
+        pat_fname = "Patient_Features_SubsampleX4_(\d+)\.mat"
+    else:
+        raise ValueError('Resolution must be 1, 2, or 4')
     available_files = os.listdir('data')
     patients = []
     for f in available_files:
-        m = re.match("Patient_Features_(\d+)\.mat", f)
+        m = re.match(pat_fname, f)
         if m:
             patients.append(int(m.group(1)))
     random.shuffle(patients)
@@ -59,7 +69,8 @@ def run_experiment(method):
     elif method == 2:
         methods.predict_two_stage(train_patients, test_patients, fscores,
                                   plot_predictions, stratified, n_trees,
-                                  dev_pats=dev_patients, use_mrf=False)
+                                  dev_pats=dev_patients, use_mrf=False,
+                                  resolution=resolution)
     elif method == 3:
         methods.predict_online(train_patients, test_patients, fscores,
                                plot_predictions)
