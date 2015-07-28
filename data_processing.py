@@ -214,14 +214,14 @@ def load_patient(number, do_preprocess=True, n_voxels=None, stratified=False,
 
     return x, y, coord, dim
 
-def load_patients(pats, stratified=False, resolution=1):
+def load_patients(pats, stratified=False, resolution=1, n_voxels=30000):
     xtr = np.zeros((0,0), dtype=np.float32)
     ytr = np.zeros(0)
     coordtr = np.zeros((0,3))
     patient_idxs_tr = [0]
     dims_tr = []
     for pat in pats:
-        x, y, coord, dim = load_patient(pat, n_voxels=30000,
+        x, y, coord, dim = load_patient(pat, n_voxels=n_voxels,
                                         stratified=stratified,
                                         resolution=resolution)
         ytr = np.concatenate((ytr, y))

@@ -91,7 +91,7 @@ def predict_RF(train_pats, test_pats, fscores=None, do_plot_predictions=False,
 
 def predict_two_stage(train_pats, test_pats, fscores=None,
                       do_plot_predictions=False, stratified=False, n_trees=30,
-                      dev_pats=[], use_mrf=True, resolution=1):
+                      dev_pats=[], use_mrf=True, resolution=1, n_voxels=30000):
     """
     Predict tumor voxels for given test patients.
 
@@ -103,17 +103,18 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
     model_str = ""
     if resolution != 1:
         model_str += '_res%d' % resolution
-    model1_fname = os.path.join('models', 'model1_seed%d_ntrp%d_ntep%d_ntrees%d%s.jl' %
-                                (seed, len(train_pats), len(test_pats), n_trees, model_str))
-    model2_fname = os.path.join('models', 'model2_seed%d_ntrp%d_ntep%d_ntrees%d%s.jl' %
-                                (seed, len(train_pats), len(test_pats), n_trees, model_str))
+    model1_fname = os.path.join('models', 'model1_seed%d_ntrp%d_ntep%d_ntrees%d_nvox%s%s.jl' %
+                                (seed, len(train_pats), len(test_pats), n_trees, n_voxels, model_str))
+    model2_fname = os.path.join('models', 'model2_seed%d_ntrp%d_ntep%d_ntrees%d_nvox%s%s.jl' %
+                                (seed, len(train_pats), len(test_pats), n_trees, n_voxels, model_str))
     # Load models if available
     if os.path.isfile(model1_fname) and os.path.isfile(model2_fname):
         model1 = joblib.load(model1_fname)
         model2 = joblib.load(model2_fname)
     else:
         xtr, ytr, coordtr, patient_idxs_tr, dims_tr = dp.load_patients(
-                train_pats, stratified, resolution=resolution)
+                train_pats, stratified, resolution=resolution,
+                n_voxels=n_voxels)
 
         # Make all tumor labels equal to 1 and train the first model
         ytr1 = np.array(ytr, copy=True)
@@ -132,7 +133,8 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
                 weights[ytr==i] = class_freqs[i] / sample_freqs[i]
         else:
             weights = None
-        model1 = train_RF_model(xtr, ytr1, n_trees=n_trees, sample_weight=weights, fname=model1_fname)
+        model1 = train_RF_model(xtr, ytr1, n_trees=n_trees,
+                                sample_weight=weights, fname=model1_fname)
 
         # Train the second model to separate tumor classes
         ok_idxs = ytr > 0
@@ -152,7 +154,8 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
                 weights[ytr2==i+1] = class_freqs[i] / sample_freqs[i]
         else:
             weights = None
-        model2 = train_RF_model(xtr2, ytr2, n_trees=n_trees, sample_weight=weights, fname=model2_fname)
+        model2 = train_RF_model(xtr2, ytr2, n_trees=n_trees,
+                                sample_weight=weights, fname=model2_fname)
 
     print "\n----------------------------------\n"
 
@@ -160,9 +163,9 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
         #best_potential = optimize_potential(
         #        dev_pats, model1, model2, stratified, fscores,
         #        do_plot_predictions, resolution=resolution)
-        best_radius = 6#optimize_closing(dev_pats, model1, stratified, fscores, resolution=resolution)
+        best_radius = 1#optimize_closing(dev_pats, model1, stratified, fscores, resolution=resolution)
     else:
-        best_radius = 6
+        best_radius = 1
 
 
     yte = np.zeros(0)
@@ -177,12 +180,14 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
                                            resolution=resolution)
 
         pred = model1.predict(x)
-        pp_pred = dp.post_process(coord, dim, pred, binary_closing=True, radius=best_radius)
+        pp_pred = dp.post_process(coord, dim, pred, binary_closing=True,
+                                  radius=best_radius)
 
         tumor_idxs = pp_pred > 0
-        pred_probs2 = model2.predict_proba(x[tumor_idxs,:])
-        pred2 = np.argmax(pred_probs2, axis=1) + 1
-        pp_pred[tumor_idxs] = pred2
+        if sum(tumor_idxs) > 0:
+            pred_probs2 = model2.predict_proba(x[tumor_idxs,:])
+            pred2 = np.argmax(pred_probs2, axis=1) + 1
+            pp_pred[tumor_idxs] = pred2
 
         pp_pred15 = np.array(pp_pred)
         print "\nConfusion matrix:"
@@ -192,12 +197,17 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
 
         if use_mrf:
             # MRF post processing
-            edges = dp.create_graph(coord[tumor_idxs,:])
-            pp_pred[tumor_idxs] = dp.mrf(pred_probs2, edges, potential=best_potential) + 1
+            if sum(tumor_idxs) > 0:
+                edges = dp.create_graph(coord[tumor_idxs,:])
+                pp_pred[tumor_idxs] = dp.mrf(pred_probs2, edges,
+                                             potential=best_potential) + 1
             method = 'MRF'
         else:
             # Closing post processing
-            pp_pred[tumor_idxs] = dp.post_process(coord[tumor_idxs,:], dim, pred2, remove_components=False, radius=best_radius)
+            if sum(tumor_idxs) > 0:
+                pp_pred[tumor_idxs] = dp.post_process(coord[tumor_idxs,:], dim,
+                                                      pred2, remove_components=False,
+                                                      radius=best_radius)
             method = 'closing'
 
         print "\nConfusion matrix (pp):"
