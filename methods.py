@@ -112,8 +112,8 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
         model1 = joblib.load(model1_fname)
         model2 = joblib.load(model2_fname)
     else:
-        xtr, ytr, coordtr, patient_idxs_tr, dims_tr = dp.load_patients(train_pats,
-                                                                       stratified)
+        xtr, ytr, coordtr, patient_idxs_tr, dims_tr = dp.load_patients(
+                train_pats, stratified, resolution=resolution)
 
         # Make all tumor labels equal to 1 and train the first model
         ytr1 = np.array(ytr, copy=True)
@@ -159,8 +159,8 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
     if len(dev_pats) > 0:
         #best_potential = optimize_potential(
         #        dev_pats, model1, model2, stratified, fscores,
-        #        do_plot_predictions)
-        best_radius = 6#optimize_closing(dev_pats, model1, stratified, fscores)
+        #        do_plot_predictions, resolution=resolution)
+        best_radius = 6#optimize_closing(dev_pats, model1, stratified, fscores, resolution=resolution)
     else:
         best_radius = 6
 
@@ -173,7 +173,8 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
     # Iterate over test users
     for te_idx, te_pat in enumerate(test_pats):
         print "Test patient number %d" % (te_idx+1)
-        x, y, coord, dim = dp.load_patient(te_pat, n_voxels=None)
+        x, y, coord, dim = dp.load_patient(te_pat, n_voxels=None,
+                                           resolution=resolution)
 
         pred = model1.predict(x)
         pp_pred = dp.post_process(coord, dim, pred, binary_closing=True, radius=best_radius)
@@ -249,7 +250,7 @@ def train_RF_model(xtr, ytr, n_trees=10, sample_weight=None, fname=None):
     print model.feature_importances_[best_feats]
     return model
 
-def optimize_closing(dev_pats, model1, stratified, fscores=None):
+def optimize_closing(dev_pats, model1, stratified, fscores=None, resolution=1):
     radii = [1,2,3,4,5,6,7,8,9,10]
     nr = len(radii)
 
@@ -261,7 +262,8 @@ def optimize_closing(dev_pats, model1, stratified, fscores=None):
     # Iterate over dev users
     for de_idx, de_pat in enumerate(dev_pats):
         print "Development patient number %d" % (de_idx+1)
-        x, y, coord, dim = dp.load_patient(de_pat, n_voxels=None)
+        x, y, coord, dim = dp.load_patient(de_pat, n_voxels=None,
+                                           resolution=resolution)
         yde = np.concatenate((yde, y))
         patient_idxs_de.append(len(yde))
 
@@ -295,7 +297,7 @@ def optimize_closing(dev_pats, model1, stratified, fscores=None):
     return best_r
 
 def optimize_potential(dev_pats, model1, model2, stratified, fscores=None,
-                       do_plot_predictions=False):
+                       do_plot_predictions=False, resolution=1):
     n_labels = 4
     potentials = []
     factors = [0.01, 0.02, 0.05, 0.1, 0.2, 0.3, 0.5, 1, 2]
@@ -321,7 +323,8 @@ def optimize_potential(dev_pats, model1, model2, stratified, fscores=None,
     # Iterate over dev users
     for de_idx, de_pat in enumerate(dev_pats):
         print "Development patient number %d" % (de_idx+1)
-        x, y, coord, dim = dp.load_patient(de_pat, n_voxels=None)
+        x, y, coord, dim = dp.load_patient(de_pat, n_voxels=None,
+                                           resolution=resolution)
         yde = np.concatenate((yde, y))
         patient_idxs_de.append(len(yde))
 
