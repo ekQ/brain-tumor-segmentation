@@ -6,23 +6,21 @@ import re
 import random
 import sys
 
-import patient_plotting as pp
-import extras
 import methods
 
 # Experiment parameters
 seed = 98234111
-n_tr_p = 20 # Train patients
+n_tr_p = 50 # Train patients
 n_de_p = 0 # Development patients
-n_te_p = 10 # Test patients
+n_te_p = 100 # Test patients
 stdout2file = True
 n_trees = 30
-plot_predictions = True
+plot_predictions = False
 stratified = False
-resolution = 2 # 1/2/4, 1 is the highest, 2 is 2^3 times smaller
+resolution = 1 # 1/2/4, 1 is the highest, 2 is 2^3 times smaller
 use_only_manual = True
 manual_idxs = range(1,21) + range(221,231)
-n_voxels = None
+n_voxels = 30000
 
 def run_experiment(method):
     # Plot parameters to store them to output log
@@ -60,13 +58,16 @@ def run_experiment(method):
         m = re.match(pat_fname, f)
         if m:
             pat_idx = int(m.group(1))
-            if not use_only_manual or pat_idx in manual_idxs:
+            if not use_only_manual or pat_idx not in manual_idxs:
                 patients.append(pat_idx)
     random.shuffle(patients)
     print patients
     assert n_tr_p + n_de_p + n_te_p <= len(patients), \
             "Not enough patients available"
-    test_patients = patients[:n_te_p]
+    if use_only_manual:
+        test_patients = manual_idxs
+    else:
+        test_patients = patients[:n_te_p]
     train_patients = patients[n_te_p:n_te_p+n_tr_p]
     dev_patients = patients[n_te_p+n_tr_p:n_te_p+n_tr_p+n_de_p]
 
@@ -95,5 +96,5 @@ if __name__ == "__main__":
     datestr = re.sub('[ :]','',str(dt.datetime.now())[:-7])
     if stdout2file:
         sys.stdout = open(os.path.join('results', "stdout_%s_seed%d_ntrp%d_ntep%d_res%d.txt" % (datestr,seed, n_tr_p, n_te_p, resolution)), 'w')
-        sys.stderr = open(os.path.join('results', "stderr_%s_seed%d_ntrp%d_ntep%d_res%d.txt" % (datestr,seed, n_tr_p, n_te_p, resolution)), 'w')
+        #sys.stderr = open(os.path.join('results', "stderr_%s_seed%d_ntrp%d_ntep%d_res%d.txt" % (datestr,seed, n_tr_p, n_te_p, resolution)), 'w')
     main()
