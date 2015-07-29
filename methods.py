@@ -136,6 +136,9 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
         model1 = train_RF_model(xtr, ytr1, n_trees=n_trees,
                                 sample_weight=weights, fname=model1_fname)
 
+        # Compute minimum number of tumor voxels in a train patient
+        min_voxels = get_min_voxels(ytr, patient_idxs_tr)
+
         # Train the second model to separate tumor classes
         ok_idxs = ytr > 0
         xtr2 = np.asarray(xtr[ok_idxs,:])
@@ -179,7 +182,15 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
         x, y, coord, dim = dp.load_patient(te_pat, n_voxels=None,
                                            resolution=resolution)
 
-        pred = model1.predict(x)
+        #pred = model1.predict(x)
+        pred_probs = model1.predict_proba(x)
+        pred = np.argmax(pred_probs, axis=1)
+        # If the predicted tumor is too small set the most probable tumor
+        # voxels to one
+        if sum(pred > 0) < min_voxels:
+            pred = np.zeros(pred.shape)
+            new_idxs = np.argsort(pred_probs[:,1])[-min_voxels:]
+            pred[new_idxs] = 1
         pp_pred = dp.post_process(coord, dim, pred, binary_closing=True,
                                   radius=best_radius)
 
@@ -416,6 +427,15 @@ def train_RF_model(xtr, ytr, n_trees=10, sample_weight=None, fname=None):
     print best_feats
     print model.feature_importances_[best_feats]
     return model
+
+def get_min_voxels(y, patient_idxs):
+    min_size = 1e9
+    for i in range(len(patient_idxs)-1):
+        yy = y[patient_idxs[i]:patient_idxs[i+1]]
+        tumor_size = sum(yy > 0)
+        if tumor_size < min_size:
+            min_size = tumor_size
+    return min_size
 
 def predict_online(train_pats, test_pats, fscores=None, do_plot_predictions=False,
                    stratified=False):
