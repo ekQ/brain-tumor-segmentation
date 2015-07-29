@@ -3,27 +3,43 @@ from patient_plotting import plot_full_feature_scatter_matrix;
 from data_processing import load_patients;
 import numpy as np;
 from methods import train_RF_model;
-import data_processing as dp
-
-
+import data_processing as dp;
+import os;
+from sklearn.metrics import confusion_matrix;
+from evaluation import dice_scores;
+from sklearn.externals import joblib;
 
 
 def predict_two_stages(xtr,ytr,Test_No,n_trees=30):
+	fscores=None;
 	ytr1 = np.array(ytr, copy=True);
 	ytr1[ytr1>0] = 1;
-	model1_fname = 'model1.jl';
-	model2_fname = 'model2.jl';
+	model1_fname = None;
+	model2_fname = None;
 	weights = None;
 	model1 = train_RF_model(xtr, ytr1, n_trees=n_trees, sample_weight=weights, fname=model1_fname);
 
 	model2 = train_RF_model(xtr, ytr, n_trees=n_trees, sample_weight=weights, fname=model2_fname);
+	test_pats = [10];
+
+	yte = np.zeros(0);
+	predte = np.zeros(0);
+	predte_no_pp = np.zeros(0);
+	patient_idxs_te = [0];
+	print "Test users:"
 
 	for te_idx, te_pat in enumerate(test_pats):
-		x, y, coord, dim = dp.load_patient(te_pat, n_voxels=None);
-		pred = model1.predict(x);
+		X, y, coord, dim = dp.load_patient(te_pat, n_voxels=None);
+		m = X.shape[0];
+		n = 1;
+		k = 25;
+		O = sparse_encode(X,m,n,k);
+
+		pred = model1.predict(O);
+		best_radius = 6
 		pp_pred = dp.post_process(coord, dim, pred, binary_closing=True, radius=best_radius);
 		tumor_idxs = pp_pred > 0;
-		pred_probs2 = model2.predict_proba(x[tumor_idxs,:]);
+		pred_probs2 = model2.predict_proba(O[tumor_idxs,:]);
 		pred2 = np.argmax(pred_probs2, axis=1) + 1;
 		pp_pred[tumor_idxs] = pred2;
 		pp_pred15 = np.array(pp_pred);
@@ -49,10 +65,6 @@ def predict_two_stages(xtr,ytr,Test_No,n_trees=30):
 
 		dice_scores(y, pp_pred, label='Dice scores (pp):')
 
-		if do_plot_predictions:
-			# Plot the patient
-			pif = os.path.join('results', 'pat%d_slices_2S_%s.png' % (te_pat, method));
-			pp.plot_predictions(coord, dim, pp_pred15, y, pp_pred, fname=pif);
 
 
 	print "\nOverall confusion matrix:"
@@ -76,9 +88,11 @@ if __name__ == '__main__':
 	X = xtr[idx,:]
 	#Y[Y < 4]=0;
 	#Y[Y == 4]=1;
-	print xtr.shape;
-	m = 2248;
+	print X.shape;
+	m = X.shape[0];
 	n = 1;
 	k = 25;
 	O = sparse_encode(X,m,n,k);
-	predict_two_stages(O,ytr,[10]);
+	print O.shape;
+	print Y.shape
+	predict_two_stages(O,Y,[10]);

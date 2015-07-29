@@ -45,7 +45,7 @@ def sparse_encode(X,m,n,k):	#Original Data, No of Rows, No of Columns, Output Co
 	for i in range(D.shape[1]):
 		O[0:m,i*n:i*n+n] = reshape(D[:,i],(m,n),order='F');
 
-	print O.shape
+	return O;
 
 
 if __name__ == '__main__':
