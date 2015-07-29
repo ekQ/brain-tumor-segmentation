@@ -91,7 +91,7 @@ def predict_RF(train_pats, test_pats, fscores=None, do_plot_predictions=False,
 
 def predict_two_stage(train_pats, test_pats, fscores=None,
                       do_plot_predictions=False, stratified=False, n_trees=30,
-                      dev_pats=[], use_mrf=True):
+                      dev_pats=[], use_mrf=True, resolution=1, n_voxels=30000):
     """
     Predict tumor voxels for given test patients.
 
@@ -100,17 +100,21 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
         test_pats -- list of patient IDs used for testing a model.
         fscores -- An opened output file to which we write the results.
     """
-    model1_fname = os.path.join('models', 'model1_seed%d_ntrp%d_ntep%d_ntrees%d_w.jl' %
-                                (seed, len(train_pats), len(test_pats), n_trees))
-    model2_fname = os.path.join('models', 'model2_seed%d_ntrp%d_ntep%d_ntrees%d_w.jl' %
-                                (seed, len(train_pats), len(test_pats), n_trees))
+    model_str = ""
+    if resolution != 1:
+        model_str += '_res%d' % resolution
+    model1_fname = os.path.join('models', 'model1_seed%d_ntrp%d_ntep%d_ntrees%d_nvox%s%s.jl' %
+                                (seed, len(train_pats), len(test_pats), n_trees, n_voxels, model_str))
+    model2_fname = os.path.join('models', 'model2_seed%d_ntrp%d_ntep%d_ntrees%d_nvox%s%s.jl' %
+                                (seed, len(train_pats), len(test_pats), n_trees, n_voxels, model_str))
     # Load models if available
     if os.path.isfile(model1_fname) and os.path.isfile(model2_fname):
         model1 = joblib.load(model1_fname)
         model2 = joblib.load(model2_fname)
     else:
-        xtr, ytr, coordtr, patient_idxs_tr, dims_tr = dp.load_patients(train_pats,
-                                                                       stratified)
+        xtr, ytr, coordtr, patient_idxs_tr, dims_tr = dp.load_patients(
+                train_pats, stratified, resolution=resolution,
+                n_voxels=n_voxels)
 
         # Make all tumor labels equal to 1 and train the first model
         ytr1 = np.array(ytr, copy=True)
@@ -129,7 +133,8 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
                 weights[ytr==i] = class_freqs[i] / sample_freqs[i]
         else:
             weights = None
-        model1 = train_RF_model(xtr, ytr1, n_trees=n_trees, sample_weight=weights, fname=model1_fname)
+        model1 = train_RF_model(xtr, ytr1, n_trees=n_trees,
+                                sample_weight=weights, fname=model1_fname)
 
         # Train the second model to separate tumor classes
         ok_idxs = ytr > 0
@@ -149,17 +154,18 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
                 weights[ytr2==i+1] = class_freqs[i] / sample_freqs[i]
         else:
             weights = None
-        model2 = train_RF_model(xtr2, ytr2, n_trees=n_trees, sample_weight=weights, fname=model2_fname)
+        model2 = train_RF_model(xtr2, ytr2, n_trees=n_trees,
+                                sample_weight=weights, fname=model2_fname)
 
     print "\n----------------------------------\n"
 
     if len(dev_pats) > 0:
         #best_potential = optimize_potential(
         #        dev_pats, model1, model2, stratified, fscores,
-        #        do_plot_predictions)
-        best_radius = 6#optimize_closing(dev_pats, model1, stratified, fscores)
+        #        do_plot_predictions, resolution=resolution)
+        best_radius = 1#optimize_closing(dev_pats, model1, stratified, fscores, resolution=resolution)
     else:
-        best_radius = 6
+        best_radius = 1
 
 
     yte = np.zeros(0)
@@ -170,15 +176,18 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
     # Iterate over test users
     for te_idx, te_pat in enumerate(test_pats):
         print "Test patient number %d" % (te_idx+1)
-        x, y, coord, dim = dp.load_patient(te_pat, n_voxels=None)
+        x, y, coord, dim = dp.load_patient(te_pat, n_voxels=None,
+                                           resolution=resolution)
 
         pred = model1.predict(x)
-        pp_pred = dp.post_process(coord, dim, pred, binary_closing=True, radius=best_radius)
+        pp_pred = dp.post_process(coord, dim, pred, binary_closing=True,
+                                  radius=best_radius)
 
         tumor_idxs = pp_pred > 0
-        pred_probs2 = model2.predict_proba(x[tumor_idxs,:])
-        pred2 = np.argmax(pred_probs2, axis=1) + 1
-        pp_pred[tumor_idxs] = pred2
+        if sum(tumor_idxs) > 0:
+            pred_probs2 = model2.predict_proba(x[tumor_idxs,:])
+            pred2 = np.argmax(pred_probs2, axis=1) + 1
+            pp_pred[tumor_idxs] = pred2
 
         pp_pred15 = np.array(pp_pred)
         print "\nConfusion matrix:"
@@ -188,12 +197,17 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
 
         if use_mrf:
             # MRF post processing
-            edges = dp.create_graph(coord[tumor_idxs,:])
-            pp_pred[tumor_idxs] = dp.mrf(pred_probs2, edges, potential=best_potential) + 1
+            if sum(tumor_idxs) > 0:
+                edges = dp.create_graph(coord[tumor_idxs,:])
+                pp_pred[tumor_idxs] = dp.mrf(pred_probs2, edges,
+                                             potential=best_potential) + 1
             method = 'MRF'
         else:
             # Closing post processing
-            pp_pred[tumor_idxs] = dp.post_process(coord[tumor_idxs,:], dim, pred2, remove_components=False, radius=best_radius)
+            if sum(tumor_idxs) > 0:
+                pp_pred[tumor_idxs] = dp.post_process(coord[tumor_idxs,:], dim,
+                                                      pred2, remove_components=False,
+                                                      radius=best_radius)
             method = 'closing'
 
         print "\nConfusion matrix (pp):"
@@ -227,7 +241,8 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
 def train_RF_model(xtr, ytr, n_trees=10, sample_weight=None, fname=None):
     # Train classifier
     t0 = time.time()
-    model = RandomForestClassifier(n_trees, oob_score=True, verbose=1, n_jobs=16, class_weight='auto')
+    model = RandomForestClassifier(n_trees, oob_score=True, verbose=1,
+                                   n_jobs=16)#, class_weight='auto')
     #model = ExtraTreesClassifier(n_trees, verbose=1, n_jobs=4)
     #model = svm.SVC(C=1000)
     model.fit(xtr, ytr, sample_weight=sample_weight)
@@ -245,8 +260,8 @@ def train_RF_model(xtr, ytr, n_trees=10, sample_weight=None, fname=None):
     print model.feature_importances_[best_feats]
     return model
 
-def optimize_closing(dev_pats, model1, stratified, fscores=None):
-    radii = [1, 3, 5, 6, 7, 10, 15]#, 20, 30]
+def optimize_closing(dev_pats, model1, stratified, fscores=None, resolution=1):
+    radii = [1,2,3,4,5,6,7,8,9,10]
     nr = len(radii)
 
     yde = np.zeros(0)
@@ -257,7 +272,8 @@ def optimize_closing(dev_pats, model1, stratified, fscores=None):
     # Iterate over dev users
     for de_idx, de_pat in enumerate(dev_pats):
         print "Development patient number %d" % (de_idx+1)
-        x, y, coord, dim = dp.load_patient(de_pat, n_voxels=None)
+        x, y, coord, dim = dp.load_patient(de_pat, n_voxels=None,
+                                           resolution=resolution)
         yde = np.concatenate((yde, y))
         patient_idxs_de.append(len(yde))
 
@@ -291,7 +307,7 @@ def optimize_closing(dev_pats, model1, stratified, fscores=None):
     return best_r
 
 def optimize_potential(dev_pats, model1, model2, stratified, fscores=None,
-                       do_plot_predictions=False):
+                       do_plot_predictions=False, resolution=1):
     n_labels = 4
     potentials = []
     factors = [0.01, 0.02, 0.05, 0.1, 0.2, 0.3, 0.5, 1, 2]
@@ -317,7 +333,8 @@ def optimize_potential(dev_pats, model1, model2, stratified, fscores=None,
     # Iterate over dev users
     for de_idx, de_pat in enumerate(dev_pats):
         print "Development patient number %d" % (de_idx+1)
-        x, y, coord, dim = dp.load_patient(de_pat, n_voxels=None)
+        x, y, coord, dim = dp.load_patient(de_pat, n_voxels=None,
+                                           resolution=resolution)
         yde = np.concatenate((yde, y))
         patient_idxs_de.append(len(yde))
 

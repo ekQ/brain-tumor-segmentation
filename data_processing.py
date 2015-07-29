@@ -143,8 +143,17 @@ def post_process_multi_radii(coord, dim, pred, radii, y=None,
 
 class_counts = np.zeros(5)
 
-def load_patient(number, do_preprocess=True, n_voxels=None, stratified=False):
-    data = scipy.io.loadmat(os.path.join('data', 'Patient_Features_%d.mat' % number))
+def load_patient(number, do_preprocess=True, n_voxels=None, stratified=False,
+                 resolution=1):
+    if resolution == 1:
+        pat_fname = "Patient_Features_%d.mat" % number
+    elif resolution == 2:
+        pat_fname = "Patient_Features_SubsampleX2_%d.mat" % number
+    elif resolution == 4:
+        pat_fname = "Patient_Features_SubsampleX4_%d.mat" % number
+    else:
+        raise ValueError('Resolution must be 1, 2, or 4')
+    data = scipy.io.loadmat(os.path.join('data', pat_fname))
     data = data['featuresMatrix']
 
     tumor_grade = data[0,0]
@@ -205,15 +214,16 @@ def load_patient(number, do_preprocess=True, n_voxels=None, stratified=False):
 
     return x, y, coord, dim
 
-def load_patients(pats, stratified=False):
+def load_patients(pats, stratified=False, resolution=1, n_voxels=30000):
     xtr = np.zeros((0,0), dtype=np.float32)
     ytr = np.zeros(0)
     coordtr = np.zeros((0,3))
     patient_idxs_tr = [0]
     dims_tr = []
     for pat in pats:
-        x, y, coord, dim = load_patient(pat, n_voxels=30000,
-                                        stratified=stratified)
+        x, y, coord, dim = load_patient(pat, n_voxels=n_voxels,
+                                        stratified=stratified,
+                                        resolution=resolution)
         ytr = np.concatenate((ytr, y))
         if xtr.shape[0] == 0:
             xtr = x
