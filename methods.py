@@ -111,6 +111,7 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
     if os.path.isfile(model1_fname) and os.path.isfile(model2_fname):
         model1 = joblib.load(model1_fname)
         model2 = joblib.load(model2_fname)
+        min_voxels = 3000
     else:
         xtr, ytr, coordtr, patient_idxs_tr, dims_tr = dp.load_patients(
                 train_pats, stratified, resolution=resolution,
@@ -137,7 +138,8 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
                                 sample_weight=weights, fname=model1_fname)
 
         # Compute minimum number of tumor voxels in a train patient
-        min_voxels = get_min_voxels(ytr, patient_idxs_tr)
+        min_voxels = 3000#get_min_voxels(ytr, patient_idxs_tr)
+        print "Minimum number of voxels in a tumor: %d" % min_voxels
 
         # Train the second model to separate tumor classes
         ok_idxs = ytr > 0
@@ -188,6 +190,7 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
         # If the predicted tumor is too small set the most probable tumor
         # voxels to one
         if sum(pred > 0) < min_voxels:
+            print "Patient having too few voxels (%d < %d)" % (sum(pred > 0), min_voxels)
             pred = np.zeros(pred.shape)
             new_idxs = np.argsort(pred_probs[:,1])[-min_voxels:]
             pred[new_idxs] = 1
@@ -234,7 +237,7 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
 
         if do_plot_predictions:
             # Plot the patient
-            pif = os.path.join('results', 'pat%d_slices_2S_%s.png' % (te_pat, method))
+            pif = os.path.join('results', 'pat%d_slices_min_2S_%s.png' % (te_pat, method))
             pp.plot_predictions(coord, dim, pp_pred15, y, pp_pred, fname=pif)
             #if pred_fname is not None:
             #    extras.save_predictions(coord, dim_list[0], pred, yte, pred_fname)

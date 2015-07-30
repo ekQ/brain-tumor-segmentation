@@ -12,14 +12,14 @@ import methods
 seed = 98234111
 n_tr_p = 50 # Train patients
 n_de_p = 0 # Development patients
-n_te_p = 100 # Test patients
-stdout2file = True
+n_te_p = 30 # Test patients
+stdout2file = False
 n_trees = 30
 plot_predictions = False
 stratified = False
 resolution = 1 # 1/2/4, 1 is the highest, 2 is 2^3 times smaller
 use_only_manual = True
-manual_idxs = range(1,21) + range(221,231)
+manual_idxs = range(1,21) #+ range(221,231)
 n_voxels = 30000
 
 def run_experiment(method):
