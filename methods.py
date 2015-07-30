@@ -91,7 +91,8 @@ def predict_RF(train_pats, test_pats, fscores=None, do_plot_predictions=False,
 
 def predict_two_stage(train_pats, test_pats, fscores=None,
                       do_plot_predictions=False, stratified=False, n_trees=30,
-                      dev_pats=[], use_mrf=True, resolution=1, n_voxels=30000):
+                      dev_pats=[], use_mrf=True, resolution=1, n_voxels=30000,
+                      mat_dir=None):
     """
     Predict tumor voxels for given test patients.
 
@@ -235,7 +236,12 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
         if do_plot_predictions:
             # Plot the patient
             pif = os.path.join('results', 'pat%d_slices_2S_%s.png' % (te_pat, method))
-            pp.plot_predictions(coord, dim, pp_pred15, y, pp_pred, fname=pif)
+            if mat_dir is not None:
+                fmat = os.path.join(mat_dir, 'pat%d.mat' % te_pat)
+            else:
+                fmat = None
+            pp.plot_predictions(coord, dim, pp_pred15, y, pp_pred, fname=pif,
+                                fmat=fmat)
             #if pred_fname is not None:
             #    extras.save_predictions(coord, dim_list[0], pred, yte, pred_fname)
 

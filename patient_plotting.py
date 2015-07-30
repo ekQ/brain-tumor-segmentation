@@ -3,6 +3,7 @@ import numpy as np
 from matplotlib import colors
 import cPickle as pickle
 import data_processing as dp;
+import scipy.io
 
 def plot_cm(cm, title='Confusion matrix', cmap=plt.cm.Blues):
     plt.imshow(cm, interpolation='nearest', cmap=cmap)
@@ -25,21 +26,21 @@ def plot_confusion_matrix(cm):
     plot_cm(cm_normalized, title='Normalized confusion matrix')
 
 def plot_full_feature_scatter_matrix(X,Y,fname='scatter_matrix_full_feature.png'):
-	print X.shape;
-	print Y.shape
-	import pandas as pd;
-	from pandas.tools.plotting import scatter_matrix;
-	COL = ['VAR1', 'VAR2', 'VAR3', 'VAR4', 'VAR5', 'VAR6', 'VAR7', 'VAR8', 'VAR9', 'VAR10', 'VAR11', 'VAR12', 'VAR13', 'VAR14', 'VAR15', 'VAR16', 'VAR17', 'VAR18', 'VAR19', 'VAR20', 'label'];
-	df = pd.DataFrame(np.hstack((X,Y.reshape(Y.shape[0],1))), columns=COL);
-	df['label'] = df['label'].astype(int);
-	R = list(np.linspace(0,1,num=20));
-	G = list(np.linspace(1,0,num=20));
-	B = list(np.linspace(0,1,num=20));
-	colors = ['r','g','blue','c','m','y','black','w','orange','darkgreen','r','g','blue','c','m','y','black','w','orange','darkgreen']
-	import matplotlib.pyplot as plt;
-	scatter_matrix(df,figsize=[25,25], marker='x',diagonal='kde',c=df.label.apply(lambda k:colors[k]));
-	plt.savefig(fname);
-	
+    print X.shape;
+    print Y.shape
+    import pandas as pd;
+    from pandas.tools.plotting import scatter_matrix;
+    COL = ['VAR1', 'VAR2', 'VAR3', 'VAR4', 'VAR5', 'VAR6', 'VAR7', 'VAR8', 'VAR9', 'VAR10', 'VAR11', 'VAR12', 'VAR13', 'VAR14', 'VAR15', 'VAR16', 'VAR17', 'VAR18', 'VAR19', 'VAR20', 'label'];
+    df = pd.DataFrame(np.hstack((X,Y.reshape(Y.shape[0],1))), columns=COL);
+    df['label'] = df['label'].astype(int);
+    R = list(np.linspace(0,1,num=20));
+    G = list(np.linspace(1,0,num=20));
+    B = list(np.linspace(0,1,num=20));
+    colors = ['r','g','blue','c','m','y','black','w','orange','darkgreen','r','g','blue','c','m','y','black','w','orange','darkgreen']
+    import matplotlib.pyplot as plt;
+    scatter_matrix(df,figsize=[25,25], marker='x',diagonal='kde',c=df.label.apply(lambda k:colors[k]));
+    plt.savefig(fname);
+ 
 def plot_scatter_matrix(x,y,fname='scatter_matrix.png'):
     import pandas as pd
     from pandas.tools.plotting import scatter_matrix
@@ -59,7 +60,7 @@ def plot_all_scatter_matrices(xx, yy):
         y = yy
         plot_scatter_matrix(x,y,fname=os.path.join('plots', 'scatter_matrix_%s.png' % modalities[i]))
 
-def plot_predictions(coord, dim, pred, gt=None, pp_pred=None, fname=None, fpickle=None):
+def plot_predictions(coord, dim, pred, gt=None, pp_pred=None, fname=None, fmat=None):
     assert coord.shape[0] == len(pred), "Number of coordinates must match to the number of labels (%d != %d)" % (coord.shape[0], len(pred))
     print "Plotting predictions..."
     D = np.ones((dim[0], dim[1], dim[2])) * -1
@@ -105,9 +106,11 @@ def plot_predictions(coord, dim, pred, gt=None, pp_pred=None, fname=None, fpickl
         plt.show()
     else:
         plt.savefig(fname)
-    if fpickle is not None:
-        with open(fpickle, 'wb') as fp:
-            pickle.dump(D, fp)
+    if fmat is not None:
+        mdict = {'pred': D, 'dim': dim}
+        scipy.io.savemat(fmat, mdict)
+        #with open(fmat, 'wb') as fp:
+        #    pickle.dump(D, fp)
     print "Done (%s).\n" % fname
 
 def save_pred_probs_csv(coord, dim, pred_probs, fname):
