@@ -9,6 +9,7 @@ from sklearn.externals import joblib
 import time
 import os
 import cPickle as pickle
+import matplotlib.pyplot as plt
 
 import patient_plotting as pp
 import extras
@@ -91,7 +92,8 @@ def predict_RF(train_pats, test_pats, fscores=None, do_plot_predictions=False,
 
 def predict_two_stage(train_pats, test_pats, fscores=None,
                       do_plot_predictions=False, stratified=False, n_trees=30,
-                      dev_pats=[], use_mrf=True, resolution=1, n_voxels=30000):
+                      dev_pats=[], use_mrf=True, resolution=1, n_voxels=30000,
+                      mat_dir=None, fresh_models=False):
     """
     Predict tumor voxels for given test patients.
 
@@ -103,12 +105,17 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
     model_str = ""
     if resolution != 1:
         model_str += '_res%d' % resolution
-    model1_fname = os.path.join('models', 'model1_seed%d_ntrp%d_ntep%d_ntrees%d_nvox%s%s.jl' %
-                                (seed, len(train_pats), len(test_pats), n_trees, n_voxels, model_str))
-    model2_fname = os.path.join('models', 'model2_seed%d_ntrp%d_ntep%d_ntrees%d_nvox%s%s.jl' %
-                                (seed, len(train_pats), len(test_pats), n_trees, n_voxels, model_str))
+    if not fresh_models:
+        model1_fname = os.path.join('models', 'model1_seed%d_ntrp%d_ntep%d_ntrees%d_nvox%s%s.jl' %
+                                    (seed, len(train_pats), len(test_pats), n_trees, n_voxels, model_str))
+        model2_fname = os.path.join('models', 'model2_seed%d_ntrp%d_ntep%d_ntrees%d_nvox%s%s.jl' %
+                                    (seed, len(train_pats), len(test_pats), n_trees, n_voxels, model_str))
+    else:
+        model1_fname = None
+        model2_fname = None
     # Load models if available
-    if os.path.isfile(model1_fname) and os.path.isfile(model2_fname):
+    if not fresh_models and os.path.isfile(model1_fname) and \
+            os.path.isfile(model2_fname):
         model1 = joblib.load(model1_fname)
         model2 = joblib.load(model2_fname)
         min_voxels = 3000
@@ -168,9 +175,9 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
         #best_potential = optimize_potential(
         #        dev_pats, model1, model2, stratified, fscores,
         #        do_plot_predictions, resolution=resolution)
-        best_radius = 1#optimize_closing(dev_pats, model1, stratified, fscores, resolution=resolution)
+        best_radius = 6#optimize_closing(dev_pats, model1, stratified, fscores, resolution=resolution)
     else:
-        best_radius = 1
+        best_radius = 6
 
 
     yte = np.zeros(0)
@@ -237,8 +244,13 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
 
         if do_plot_predictions:
             # Plot the patient
-            pif = os.path.join('results', 'pat%d_slices_min_2S_%s.png' % (te_pat, method))
-            pp.plot_predictions(coord, dim, pp_pred15, y, pp_pred, fname=pif)
+            pif = os.path.join('results', 'pat%d_slices_2S_%s.png' % (te_pat, method))
+            if mat_dir is not None:
+                fmat = os.path.join(mat_dir, 'pat%d.mat' % te_pat)
+            else:
+                fmat = None
+            pp.plot_predictions(coord, dim, pp_pred15, y, pp_pred, fname=pif,
+                                fmat=fmat)
             #if pred_fname is not None:
             #    extras.save_predictions(coord, dim_list[0], pred, yte, pred_fname)
 
@@ -409,27 +421,6 @@ def optimize_potential(dev_pats, model1, model2, stratified, fscores=None,
     print "Best potential (score=%f):" % (best_score)
     print best_potential
     return best_potential
-
-def train_RF_model(xtr, ytr, n_trees=10, sample_weight=None, fname=None):
-    # Train classifier
-    t0 = time.time()
-    model = RandomForestClassifier(n_trees, oob_score=True, verbose=1, n_jobs=16)
-    #model = ExtraTreesClassifier(n_trees, verbose=1, n_jobs=4)
-    #model = svm.SVC(C=1000)
-    model.fit(xtr, ytr, sample_weight=sample_weight)
-    if fname is not None:
-        joblib.dump(model, fname)
-    print "Training/loading took %.2f seconds" % (time.time()-t0)
-    #print "OOB score: %.2f%%" % (model.oob_score_*100)
-    '''
-    print "Feature importances:"
-    for i in range(4):
-        print model.feature_importances_[i*20:(i+1)*20]
-    '''
-    best_feats = np.argsort(model.feature_importances_)[::-1]
-    print best_feats
-    print model.feature_importances_[best_feats]
-    return model
 
 def get_min_voxels(y, patient_idxs):
     min_size = 1e9

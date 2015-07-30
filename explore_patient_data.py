@@ -5,6 +5,7 @@ import os
 import re
 import random
 import sys
+from sklearn.cross_validation import KFold
 
 import methods
 
@@ -13,14 +14,16 @@ seed = 98234111
 n_tr_p = 50 # Train patients
 n_de_p = 0 # Development patients
 n_te_p = 30 # Test patients
-stdout2file = False
+stdout2file = True
 n_trees = 30
-plot_predictions = False
+plot_predictions = True
 stratified = False
 resolution = 1 # 1/2/4, 1 is the highest, 2 is 2^3 times smaller
-use_only_manual = True
+use_only_manual = False
 manual_idxs = range(1,21) #+ range(221,231)
-n_voxels = 30000
+n_voxels = 10000
+do_cv = True
+n_folds = 2
 
 def run_experiment(method):
     # Plot parameters to store them to output log
@@ -32,6 +35,7 @@ def run_experiment(method):
     print "resolution", resolution
     print "use_only_manual", use_only_manual
     print "n_voxels", n_voxels
+    print "do_cv", do_cv
 
     method_names = {1:'RF', 2:'two-stage', 3:'online'}
     datestr = re.sub('[ :]','',str(dt.datetime.now())[:-7])
@@ -58,32 +62,48 @@ def run_experiment(method):
         m = re.match(pat_fname, f)
         if m:
             pat_idx = int(m.group(1))
-            if not use_only_manual or pat_idx not in manual_idxs:
+            if do_cv or (not use_only_manual) or (pat_idx not in manual_idxs):
                 patients.append(pat_idx)
     random.shuffle(patients)
     print patients
     assert n_tr_p + n_de_p + n_te_p <= len(patients), \
             "Not enough patients available"
-    if use_only_manual:
-        test_patients = manual_idxs
-    else:
-        test_patients = patients[:n_te_p]
-    train_patients = patients[n_te_p:n_te_p+n_tr_p]
-    dev_patients = patients[n_te_p+n_tr_p:n_te_p+n_tr_p+n_de_p]
 
-    if method == 1:
-        methods.predict_RF(train_patients, test_patients, fscores,
-                           plot_predictions, stratified)
-    elif method == 2:
-        methods.predict_two_stage(train_patients, test_patients, fscores,
-                                  plot_predictions, stratified, n_trees,
-                                  dev_pats=dev_patients, use_mrf=False,
-                                  resolution=resolution, n_voxels=n_voxels)
-    elif method == 3:
-        methods.predict_online(train_patients, test_patients, fscores,
-                               plot_predictions)
-    else:
-        print "Unknown method:", method
+    if not do_cv:
+        if use_only_manual:
+            test_patients = manual_idxs
+        else:
+            test_patients = patients[:n_te_p]
+        train_patients = patients[n_te_p:n_te_p+n_tr_p]
+        dev_patients = patients[n_te_p+n_tr_p:n_te_p+n_tr_p+n_de_p]
+
+        if method == 1:
+            methods.predict_RF(train_patients, test_patients, fscores,
+                               plot_predictions, stratified)
+        elif method == 2:
+            methods.predict_two_stage(train_patients, test_patients, fscores,
+                                      plot_predictions, stratified, n_trees,
+                                      dev_pats=dev_patients, use_mrf=False,
+                                      resolution=resolution, n_voxels=n_voxels)
+        elif method == 3:
+            methods.predict_online(train_patients, test_patients, fscores,
+                                   plot_predictions)
+        else:
+            print "Unknown method:", method
+    else: # Cross-validate
+        mat_dir = os.path.join('predictions', datestr)
+        os.makedirs(mat_dir)
+        kf = KFold(len(patients), n_folds)
+        patients = np.asarray(patients)
+        for train, test in kf:
+            train_patients = patients[train]
+            test_patients = patients[test]
+            dev_patients = []
+            methods.predict_two_stage(
+                    train_patients[:50], test_patients, fscores, plot_predictions,
+                    stratified, n_trees, dev_pats=dev_patients, use_mrf=False,
+                    resolution=resolution, n_voxels=n_voxels, mat_dir=mat_dir,
+                    fresh_models=True)
 
     print "Total time: %.2f seconds." % (time.time()-t_beg)
     fscores.close()
