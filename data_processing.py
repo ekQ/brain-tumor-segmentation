@@ -162,13 +162,20 @@ def load_patient(number, do_preprocess=True, n_voxels=None, stratified=False,
     row0 = 5
     y = data[row0:, 1]
     x = data[row0:, 5:]
+    coord = data[row0:, 2:5]
     print "Features available: %d" % x.shape[1]
     #x = x[:, [19, 18, 10, 0, 79, 9, 70, 69, 8, 15, 60]]
     #x = data[row0:, 5:11]
     #x = data[row0:, [5,11,17,23]]
 
     if load_hog:
-        x_extra = np.loadtxt("HOG_Features_Patient_%d_Image_1_Scale_%d.csv" % (number, resolution), skiprows=3)
+        x_extra = np.loadtxt(os.path.join("data", "HOG_Features_Patient_%d_Image_1_Scale_%d.csv" % (number, resolution)), delimiter=',', skiprows=3)
+        #print "Concatenating:", x.shape, x_extra.shape
+        if x.shape[0] > x_extra.shape[0]:
+            print "Extra rows (%d vs. %d)" % (x.shape[0], x_extra.shape[0])
+            x = x[:x_extra.shape[0],:]
+            y = y[:x_extra.shape[0]]
+            coord = coord[:x_extra.shape[0],:]
         x = np.hstack((x, x_extra[:, 4:]))
 
     if do_preprocess:
@@ -180,7 +187,6 @@ def load_patient(number, do_preprocess=True, n_voxels=None, stratified=False,
     global class_counts
     class_counts += new_counts
 
-    coord = data[row0:, 2:5]
     if n_voxels is not None and isinstance(n_voxels, int):
         idxs = np.random.permutation(len(y))
         if not stratified:

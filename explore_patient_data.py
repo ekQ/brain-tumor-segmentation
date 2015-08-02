@@ -10,19 +10,19 @@ from sklearn.cross_validation import KFold
 import methods
 
 # Experiment parameters
-seed = 98234111
-n_tr_p = 50 # Train patients
+seed = 982341119
+n_tr_p = 10 # Train patients
 n_de_p = 0 # Development patients
-n_te_p = 30 # Test patients
-stdout2file = True
-n_trees = 30
-plot_predictions = True
+n_te_p = 10 # Test patients
+stdout2file = False
+n_trees = 128
+plot_predictions = False
 stratified = False
-resolution = 1 # 1/2/4, 1 is the highest, 2 is 2^3 times smaller
+resolution = 2 # 1/2/4, 1 is the highest, 2 is 2^3 times smaller
 use_only_manual = False
 manual_idxs = range(1,21) #+ range(221,231)
 n_voxels = 10000
-do_cv = True
+do_cv = False
 n_folds = 2
 load_hog = True
 
@@ -103,7 +103,7 @@ def run_experiment(method):
             test_patients = patients[test]
             dev_patients = []
             methods.predict_two_stage(
-                    train_patients[:50], test_patients, fscores, plot_predictions,
+                    train_patients, test_patients, fscores, plot_predictions,
                     stratified, n_trees, dev_pats=dev_patients, use_mrf=False,
                     resolution=resolution, n_voxels=n_voxels, mat_dir=mat_dir,
                     fresh_models=True, load_hog=load_hog)

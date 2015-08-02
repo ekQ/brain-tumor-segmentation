@@ -105,6 +105,8 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
     model_str = ""
     if resolution != 1:
         model_str += '_res%d' % resolution
+    if load_hog:
+        model_str += '_hog'
     if not fresh_models:
         model1_fname = os.path.join('models', 'model1_seed%d_ntrp%d_ntep%d_ntrees%d_nvox%s%s.jl' %
                                     (seed, len(train_pats), len(test_pats), n_trees, n_voxels, model_str))
