@@ -178,8 +178,11 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
         #        dev_pats, model1, model2, stratified, fscores,
         #        do_plot_predictions, resolution=resolution, load_hog=load_hog)
         best_radius = 6#optimize_closing(dev_pats, model1, stratified, fscores, resolution=resolution, load_hog=load_hog)
+        best_th = optimize_threshold1(dev_pats, model1, stratified, fscores,
+                                      resolution, load_hog, best_radius)
     else:
         best_radius = 6
+        best_th = 0.5
 
 
     yte = np.zeros(0)
@@ -196,7 +199,8 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
 
         #pred = model1.predict(x)
         pred_probs = model1.predict_proba(x)
-        pred = np.argmax(pred_probs, axis=1)
+        #pred = np.argmax(pred_probs, axis=1)
+        pred = pred_probs[:,1] >= best_th
         # If the predicted tumor is too small set the most probable tumor
         # voxels to one
         if sum(pred > 0) < min_voxels:
@@ -336,6 +340,51 @@ def optimize_closing(dev_pats, model1, stratified, fscores=None, resolution=1,
             best_r = radii[i]
     print "Best r=%d, score=%f:" % (best_r, best_score)
     return best_r
+
+def optimize_threshold1(dev_pats, model1, stratified, fscores=None, resolution=1,
+                        load_hog=False, best_radius=3):
+    ths = [0.25, 0.35, 0.4, 0.45, 0.5, 0.6]
+    nt = len(ths)
+
+    yde = np.zeros(0)
+    preds = []
+    for i in range(nt):
+        preds.append(np.zeros(0))
+    patient_idxs_de = [0]
+    print "Development users:"
+    # Iterate over dev users
+    for de_idx, de_pat in enumerate(dev_pats):
+        print "Development patient number %d" % (de_idx+1)
+        x, y, coord, dim = dp.load_patient(de_pat, n_voxels=None,
+                                           resolution=resolution,
+                                           load_hog=load_hog)
+        yde = np.concatenate((yde, y))
+        patient_idxs_de.append(len(yde))
+
+        pred_probs = model1.predict_proba(x)
+        for i in range(nt):
+            threshold = ths[i]
+            pred = pred_probs[:,1] >= threshold
+            pp_pred = dp.post_process(coord, dim, pred, binary_closing=True,
+                                      radius=best_radius)
+            preds[i] = np.vstack((preds[i], pp_pred))
+
+    best_th = ths[0]
+    best_score = -1
+    for i in range(nt):
+        print "\nOverall confusion matrix (th=%.2f):" % ths[i]
+        cm = confusion_matrix(yde, preds[i])
+        print cm
+
+        ds = dice_scores(yde, preds[i], patient_idxs=patient_idxs_de,
+                         label='Overall dice scores (two-stage, th=%.2f):' % ths[i],
+                         fscores=fscores)
+        score = sum(ds)
+        if score > best_score:
+            best_score = score
+            best_th = ths[i]
+    print "Best th=%.2f, score=%f:" % (best_th, best_score)
+    return best_th
 
 def optimize_potential(dev_pats, model1, model2, stratified, fscores=None,
                        do_plot_predictions=False, resolution=1, load_hog=False):
