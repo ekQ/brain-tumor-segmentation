@@ -93,7 +93,7 @@ def predict_RF(train_pats, test_pats, fscores=None, do_plot_predictions=False,
 def predict_two_stage(train_pats, test_pats, fscores=None,
                       do_plot_predictions=False, stratified=False, n_trees=30,
                       dev_pats=[], use_mrf=True, resolution=1, n_voxels=30000,
-                      mat_dir=None, fresh_models=False):
+                      mat_dir=None, fresh_models=False, load_hog=False):
     """
     Predict tumor voxels for given test patients.
 
@@ -122,7 +122,7 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
     else:
         xtr, ytr, coordtr, patient_idxs_tr, dims_tr = dp.load_patients(
                 train_pats, stratified, resolution=resolution,
-                n_voxels=n_voxels)
+                n_voxels=n_voxels, load_hog=load_hog)
 
         # Make all tumor labels equal to 1 and train the first model
         ytr1 = np.array(ytr, copy=True)
@@ -174,8 +174,8 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
     if len(dev_pats) > 0:
         #best_potential = optimize_potential(
         #        dev_pats, model1, model2, stratified, fscores,
-        #        do_plot_predictions, resolution=resolution)
-        best_radius = 6#optimize_closing(dev_pats, model1, stratified, fscores, resolution=resolution)
+        #        do_plot_predictions, resolution=resolution, load_hog=load_hog)
+        best_radius = 6#optimize_closing(dev_pats, model1, stratified, fscores, resolution=resolution, load_hog=load_hog)
     else:
         best_radius = 6
 
@@ -189,7 +189,8 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
     for te_idx, te_pat in enumerate(test_pats):
         print "Test patient number %d" % (te_idx+1)
         x, y, coord, dim = dp.load_patient(te_pat, n_voxels=None,
-                                           resolution=resolution)
+                                           resolution=resolution,
+                                           load_hog=load_hog)
 
         #pred = model1.predict(x)
         pred_probs = model1.predict_proba(x)
@@ -286,7 +287,8 @@ def train_RF_model(xtr, ytr, n_trees=10, sample_weight=None, fname=None):
     print model.feature_importances_[best_feats]
     return model
 
-def optimize_closing(dev_pats, model1, stratified, fscores=None, resolution=1):
+def optimize_closing(dev_pats, model1, stratified, fscores=None, resolution=1,
+                     load_hog=False):
     radii = [1,2,3,4,5,6,7,8,9,10]
     nr = len(radii)
 
@@ -299,7 +301,8 @@ def optimize_closing(dev_pats, model1, stratified, fscores=None, resolution=1):
     for de_idx, de_pat in enumerate(dev_pats):
         print "Development patient number %d" % (de_idx+1)
         x, y, coord, dim = dp.load_patient(de_pat, n_voxels=None,
-                                           resolution=resolution)
+                                           resolution=resolution,
+                                           load_hog=load_hog)
         yde = np.concatenate((yde, y))
         patient_idxs_de.append(len(yde))
 
@@ -333,7 +336,7 @@ def optimize_closing(dev_pats, model1, stratified, fscores=None, resolution=1):
     return best_r
 
 def optimize_potential(dev_pats, model1, model2, stratified, fscores=None,
-                       do_plot_predictions=False, resolution=1):
+                       do_plot_predictions=False, resolution=1, load_hog=False):
     n_labels = 4
     potentials = []
     factors = [0.01, 0.02, 0.05, 0.1, 0.2, 0.3, 0.5, 1, 2]
@@ -360,7 +363,8 @@ def optimize_potential(dev_pats, model1, model2, stratified, fscores=None,
     for de_idx, de_pat in enumerate(dev_pats):
         print "Development patient number %d" % (de_idx+1)
         x, y, coord, dim = dp.load_patient(de_pat, n_voxels=None,
-                                           resolution=resolution)
+                                           resolution=resolution,
+                                           load_hog=load_hog)
         yde = np.concatenate((yde, y))
         patient_idxs_de.append(len(yde))
 

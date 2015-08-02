@@ -144,7 +144,7 @@ def post_process_multi_radii(coord, dim, pred, radii, y=None,
 class_counts = np.zeros(5)
 
 def load_patient(number, do_preprocess=True, n_voxels=None, stratified=False,
-                 resolution=1):
+                 resolution=1, load_hog=False):
     if resolution == 1:
         pat_fname = "Patient_Features_%d.mat" % number
     elif resolution == 2:
@@ -166,6 +166,11 @@ def load_patient(number, do_preprocess=True, n_voxels=None, stratified=False,
     #x = x[:, [19, 18, 10, 0, 79, 9, 70, 69, 8, 15, 60]]
     #x = data[row0:, 5:11]
     #x = data[row0:, [5,11,17,23]]
+
+    if load_hog:
+        x_extra = np.loadtxt("HOG_Features_Patient_%d_Image_1_Scale_%d.csv" % (number, resolution), skiprows=3)
+        x = np.hstack((x, x_extra[:, 4:]))
+
     if do_preprocess:
         x = preprocess(x)
         pass
@@ -214,7 +219,8 @@ def load_patient(number, do_preprocess=True, n_voxels=None, stratified=False,
 
     return x, y, coord, dim
 
-def load_patients(pats, stratified=False, resolution=1, n_voxels=30000):
+def load_patients(pats, stratified=False, resolution=1, n_voxels=30000,
+                  load_hog=False):
     xtr = np.zeros((0,0), dtype=np.float32)
     ytr = np.zeros(0)
     coordtr = np.zeros((0,3))
@@ -223,7 +229,8 @@ def load_patients(pats, stratified=False, resolution=1, n_voxels=30000):
     for pat in pats:
         x, y, coord, dim = load_patient(pat, n_voxels=n_voxels,
                                         stratified=stratified,
-                                        resolution=resolution)
+                                        resolution=resolution,
+                                        load_hog=load_hog)
         ytr = np.concatenate((ytr, y))
         if xtr.shape[0] == 0:
             xtr = x

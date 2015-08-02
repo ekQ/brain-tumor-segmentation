@@ -24,6 +24,7 @@ manual_idxs = range(1,21) #+ range(221,231)
 n_voxels = 10000
 do_cv = True
 n_folds = 2
+load_hog = True
 
 def run_experiment(method):
     # Plot parameters to store them to output log
@@ -36,6 +37,7 @@ def run_experiment(method):
     print "use_only_manual", use_only_manual
     print "n_voxels", n_voxels
     print "do_cv", do_cv
+    print "load_hog", load_hog
 
     method_names = {1:'RF', 2:'two-stage', 3:'online'}
     datestr = re.sub('[ :]','',str(dt.datetime.now())[:-7])
@@ -84,7 +86,8 @@ def run_experiment(method):
             methods.predict_two_stage(train_patients, test_patients, fscores,
                                       plot_predictions, stratified, n_trees,
                                       dev_pats=dev_patients, use_mrf=False,
-                                      resolution=resolution, n_voxels=n_voxels)
+                                      resolution=resolution, n_voxels=n_voxels,
+                                      load_hog=load_hog)
         elif method == 3:
             methods.predict_online(train_patients, test_patients, fscores,
                                    plot_predictions)
@@ -103,7 +106,7 @@ def run_experiment(method):
                     train_patients[:50], test_patients, fscores, plot_predictions,
                     stratified, n_trees, dev_pats=dev_patients, use_mrf=False,
                     resolution=resolution, n_voxels=n_voxels, mat_dir=mat_dir,
-                    fresh_models=True)
+                    fresh_models=True, load_hog=load_hog)
 
     print "Total time: %.2f seconds." % (time.time()-t_beg)
     fscores.close()
