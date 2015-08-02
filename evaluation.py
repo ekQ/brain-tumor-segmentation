@@ -3,7 +3,7 @@ import numpy as np
 def dice(y, ypred):
     A = set(np.nonzero(y)[0])
     B = set(np.nonzero(ypred)[0])
-    if len(B) == 0:
+    if len(A) == 0:
         return 1 # Not sure how it should be computed in this case
     score = 2*len(A & B) / max(float(len(A) + len(B)), 1)
     return score

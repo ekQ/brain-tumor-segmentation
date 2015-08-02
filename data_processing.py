@@ -92,11 +92,18 @@ def remove_small_components(D, min_component_size=3000):
     t0 = time.time()
     C, n_components = scipy.ndimage.measurements.label(D)
     n_removed = 0
+    max_component_size = -1
     for i in range(1,n_components+1):
         component = np.nonzero(C==i)
-        if len(component[0]) < min_component_size:
+        if len(component[0]) > max_component_size:
+            max_component_size = len(component[0])
+    for i in range(1,n_components+1):
+        component = np.nonzero(C==i)
+        if len(component[0]) < min_component_size and \
+           len(component[0]) < max_component_size:
             D[component] = 0
             n_removed += 1
+
     print "Removed %d out of %d components (%.2f seconds)." % (n_removed, n_components, time.time()-t0)
 
 def post_process_multi_radii(coord, dim, pred, radii, y=None,
@@ -169,14 +176,17 @@ def load_patient(number, do_preprocess=True, n_voxels=None, stratified=False,
     #x = data[row0:, [5,11,17,23]]
 
     if load_hog:
-        x_extra = np.loadtxt(os.path.join("data", "HOG_Features_Patient_%d_Image_1_Scale_%d.csv" % (number, resolution)), delimiter=',', skiprows=3)
-        #print "Concatenating:", x.shape, x_extra.shape
-        if x.shape[0] > x_extra.shape[0]:
-            print "Extra rows (%d vs. %d)" % (x.shape[0], x_extra.shape[0])
-            x = x[:x_extra.shape[0],:]
-            y = y[:x_extra.shape[0]]
-            coord = coord[:x_extra.shape[0],:]
-        x = np.hstack((x, x_extra[:, 4:]))
+        n_modalities = 1
+        for i in range(n_modalities):
+            x_extra = np.loadtxt(os.path.join("data", "HOG_Features_Patient_%d_Image_%d_Scale_%d.csv" % 
+                    (number, i+1, resolution)), delimiter=',', skiprows=3)
+            #print "Concatenating:", x.shape, x_extra.shape
+            if i == 0 and x.shape[0] > x_extra.shape[0]:
+                print "Extra rows (%d vs. %d)" % (x.shape[0], x_extra.shape[0])
+                x = x[:x_extra.shape[0],:]
+                y = y[:x_extra.shape[0]]
+                coord = coord[:x_extra.shape[0],:]
+            x = np.hstack((x, x_extra[:, 4:]))
 
     if do_preprocess:
         x = preprocess(x)
