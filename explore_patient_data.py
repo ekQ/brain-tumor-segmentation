@@ -87,7 +87,7 @@ def run_experiment(method):
                                       plot_predictions, stratified, n_trees,
                                       dev_pats=dev_patients, use_mrf=False,
                                       resolution=resolution, n_voxels=n_voxels,
-                                      fresh_models=True, load_hog=load_hog)
+                                      fresh_models=False, load_hog=load_hog)
         elif method == 3:
             methods.predict_online(train_patients, test_patients, fscores,
                                    plot_predictions)

@@ -367,7 +367,7 @@ def optimize_threshold1(dev_pats, model1, stratified, fscores=None, resolution=1
             pred = pred_probs[:,1] >= threshold
             pp_pred = dp.post_process(coord, dim, pred, binary_closing=True,
                                       radius=best_radius)
-            preds[i] = np.vstack((preds[i], pp_pred))
+            preds[i] = np.concatenate((preds[i], pp_pred))
 
     best_th = ths[0]
     best_score = -1
