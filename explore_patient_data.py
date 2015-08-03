@@ -10,24 +10,27 @@ from sklearn.cross_validation import KFold
 import methods
 
 # Experiment parameters
-seed = 98234111
-n_tr_p = 50 # Train patients
-n_de_p = 25 # Development patients
-n_te_p = 100 # Test patients
+seed = 982341119
+n_tr_p = 137 # Train patients
+n_de_p = 0 # Development patients
+n_te_p = 137 # Test patients
 stdout2file = False
-n_trees = 30
-plot_predictions = False
+n_trees = 64
+plot_predictions = True
 stratified = False
 resolution = 1 # 1/2/4, 1 is the highest, 2 is 2^3 times smaller
 use_only_manual = False
 manual_idxs = range(1,21) #+ range(221,231)
-n_voxels = 30000
-do_cv = False
+n_voxels = 100000
+do_cv = True
 n_folds = 2
 load_hog = False
+use_mrf = True
+fresh_models = True
 
 def run_experiment(method):
     # Plot parameters to store them to output log
+    print "method", method
     print "seed", seed
     print "n_tr_p", n_tr_p
     print "n_te_p", n_te_p
@@ -38,6 +41,8 @@ def run_experiment(method):
     print "n_voxels", n_voxels
     print "do_cv", do_cv
     print "load_hog", load_hog
+    print "use_mrf", use_mrf
+    print "fresh_models", fresh_models
 
     method_names = {1:'RF', 2:'two-stage', 3:'online'}
     datestr = re.sub('[ :]','',str(dt.datetime.now())[:-7])
@@ -71,7 +76,7 @@ def run_experiment(method):
     assert n_tr_p + n_de_p + n_te_p <= len(patients), \
             "Not enough patients available"
 
-    if not do_cv:
+    if not do_cv or method != 2:
         if use_only_manual:
             test_patients = manual_idxs
         else:
@@ -85,9 +90,9 @@ def run_experiment(method):
         elif method == 2:
             methods.predict_two_stage(train_patients, test_patients, fscores,
                                       plot_predictions, stratified, n_trees,
-                                      dev_pats=dev_patients, use_mrf=False,
+                                      dev_pats=dev_patients, use_mrf=use_mrf,
                                       resolution=resolution, n_voxels=n_voxels,
-                                      fresh_models=False, load_hog=load_hog)
+                                      fresh_models=fresh_models, load_hog=load_hog)
         elif method == 3:
             methods.predict_online(train_patients, test_patients, fscores,
                                    plot_predictions)
@@ -103,7 +108,7 @@ def run_experiment(method):
             test_patients = patients[test]
             dev_patients = []
             methods.predict_two_stage(
-                    train_patients, test_patients, fscores, plot_predictions,
+                    train_patients[:80], test_patients, fscores, plot_predictions,
                     stratified, n_trees, dev_pats=dev_patients, use_mrf=False,
                     resolution=resolution, n_voxels=n_voxels, mat_dir=mat_dir,
                     fresh_models=True, load_hog=load_hog)

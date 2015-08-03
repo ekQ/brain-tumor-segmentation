@@ -59,11 +59,11 @@ def predict_RF(train_pats, test_pats, fscores=None, do_plot_predictions=False,
             pif = os.path.join('plots', 'pat%d_slices_0_RF.png' % te_pat)
         else:
             pif = None
-        pred_probs_te = predict_and_evaluate(
+        pred = predict_and_evaluate(
                 model, x, y, coord=coord, dim_list=[dim], plot_confmat=False,
                 ret_probs=False, patient_idxs=None,
                 pred_img_fname=pif)
-        pred = np.argmax(pred_probs_te, axis=1)
+        #pred = np.argmax(pred_probs_te, axis=1)
 
         yte = np.concatenate((yte, y))
         patient_idxs_te.append(len(yte))
@@ -107,14 +107,11 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
         model_str += '_res%d' % resolution
     if load_hog:
         model_str += '_hog'
-    if not fresh_models:
-        model1_fname = os.path.join('models', 'model1_seed%d_ntrp%d_ntep%d_ntrees%d_nvox%s%s.jl' %
-                                    (seed, len(train_pats), len(test_pats), n_trees, n_voxels, model_str))
-        model2_fname = os.path.join('models', 'model2_seed%d_ntrp%d_ntep%d_ntrees%d_nvox%s%s.jl' %
-                                    (seed, len(train_pats), len(test_pats), n_trees, n_voxels, model_str))
-    else:
-        model1_fname = None
-        model2_fname = None
+    model1_fname = os.path.join('models', 'model1_seed%d_ntrp%d_ntep%d_ntrees%d_nvox%s%s.jl' %
+                                (seed, len(train_pats), len(test_pats), n_trees, n_voxels, model_str))
+    model2_fname = os.path.join('models', 'model2_seed%d_ntrp%d_ntep%d_ntrees%d_nvox%s%s.jl' %
+                                (seed, len(train_pats), len(test_pats), n_trees, n_voxels, model_str))
+
     # Load models if available
     if not fresh_models and os.path.isfile(model1_fname) and \
             os.path.isfile(model2_fname):
@@ -174,15 +171,19 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
     print "\n----------------------------------\n"
 
     if len(dev_pats) > 0:
-        #best_potential = optimize_potential(
-        #        dev_pats, model1, model2, stratified, fscores,
-        #        do_plot_predictions, resolution=resolution, load_hog=load_hog)
+        best_potential = optimize_potential(
+                dev_pats, model1, model2, stratified, fscores,
+                do_plot_predictions, resolution=resolution, load_hog=load_hog)
         best_radius = 6#optimize_closing(dev_pats, model1, stratified, fscores, resolution=resolution, load_hog=load_hog)
         best_th = optimize_threshold1(dev_pats, model1, stratified, fscores,
                                       resolution, load_hog, best_radius)
     else:
         best_radius = 6
-        best_th = 0.5
+        best_th = 0.6
+        best_potential = np.array([[0.04, 0.03555556, 0.03555556, 0.02222222],
+                                   [0.03555556, 0.04, 0.02222222, 0.],
+                                   [0.03555556, 0.02222222, 0.04, 0.03555556],
+                                   [0.02222222, 0., 0.03555556, 0.04]])
 
 
     yte = np.zeros(0)
@@ -271,7 +272,7 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
     dice_scores(yte, predte, patient_idxs=patient_idxs_te,
                 label='Overall dice scores (two-stage):', fscores=fscores)
 
-def train_RF_model(xtr, ytr, n_trees=10, sample_weight=None, fname=None):
+def train_RF_model(xtr, ytr, n_trees=30, sample_weight=None, fname=None):
     # Train classifier
     t0 = time.time()
     model = RandomForestClassifier(n_trees, oob_score=True, verbose=1,
@@ -343,7 +344,8 @@ def optimize_closing(dev_pats, model1, stratified, fscores=None, resolution=1,
 
 def optimize_threshold1(dev_pats, model1, stratified, fscores=None, resolution=1,
                         load_hog=False, best_radius=3):
-    ths = [0.25, 0.35, 0.4, 0.45, 0.5, 0.6]
+    #ths = [0.25, 0.35, 0.4, 0.45, 0.5, 0.6]
+    ths = [0.55, 0.57, 0.58, 0.59, 0.6, 0.61, 0.62, 0.63, 0.65]
     nt = len(ths)
 
     yde = np.zeros(0)
@@ -368,6 +370,8 @@ def optimize_threshold1(dev_pats, model1, stratified, fscores=None, resolution=1
             pp_pred = dp.post_process(coord, dim, pred, binary_closing=True,
                                       radius=best_radius)
             preds[i] = np.concatenate((preds[i], pp_pred))
+            dice_scores(y, pp_pred, patient_idxs=None,
+                        label='Dice scores (two-stage, th=%.2f):' % ths[i])
 
     best_th = ths[0]
     best_score = -1
@@ -390,7 +394,7 @@ def optimize_potential(dev_pats, model1, model2, stratified, fscores=None,
                        do_plot_predictions=False, resolution=1, load_hog=False):
     n_labels = 4
     potentials = []
-    factors = [0.01, 0.02, 0.05, 0.1, 0.2, 0.3, 0.5, 1, 2]
+    factors = [0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1]
     #factors = [0.00001, 0.0001, 0.001, 0.01, 0.02, 0.05, 0.1]
     # Quadratic potential
     order = [2,1,3,4]

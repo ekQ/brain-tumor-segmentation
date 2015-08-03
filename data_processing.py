@@ -154,10 +154,13 @@ def load_patient(number, do_preprocess=True, n_voxels=None, stratified=False,
                  resolution=1, load_hog=False):
     if resolution == 1:
         pat_fname = "Patient_Features_%d.mat" % number
+        pat_diff_fname = "Patient_Diff_Features_%d.mat" % number
     elif resolution == 2:
         pat_fname = "Patient_Features_SubsampleX2_%d.mat" % number
+        pat_diff_fname = "Patient_Diff_Features_SubsampleX2_%d.mat" % number
     elif resolution == 4:
         pat_fname = "Patient_Features_SubsampleX4_%d.mat" % number
+        pat_diff_fname = "Patient_Diff_Features_SubsampleX4_%d.mat" % number
     else:
         raise ValueError('Resolution must be 1, 2, or 4')
     data = scipy.io.loadmat(os.path.join('data', pat_fname))
@@ -174,8 +177,23 @@ def load_patient(number, do_preprocess=True, n_voxels=None, stratified=False,
     #x = x[:, [19, 18, 10, 0, 79, 9, 70, 69, 8, 15, 60]]
     #x = data[row0:, 5:11]
     #x = data[row0:, [5,11,17,23]]
+    
+    # Remove zero coordinates
+    ok_idxs = np.sum(coord==0, axis=1) < 3
+    y = y[ok_idxs]
+    x = x[ok_idxs,:]
+    coord = coord[ok_idxs,:]
 
     if load_hog:
+        diff_data = scipy.io.loadmat(os.path.join('data', pat_diff_fname))
+        diff_x = diff_data['featuresMatrix']
+        diff_x = diff_x[row0:, 5:]
+        if diff_x.shape[0] > x.shape[0]:
+            diff_x = diff_x[ok_idxs,:]
+        if diff_x.shape[0] != x.shape[0]:
+            print "Diff shape mismatch:", diff_x.shape[0], x.shape[0]
+        x = np.hstack((x, diff_x))
+        '''
         n_modalities = 1
         for i in range(n_modalities):
             x_extra = np.loadtxt(os.path.join("data", "HOG_Features_Patient_%d_Image_%d_Scale_%d.csv" % 
@@ -187,6 +205,7 @@ def load_patient(number, do_preprocess=True, n_voxels=None, stratified=False,
                 y = y[:x_extra.shape[0]]
                 coord = coord[:x_extra.shape[0],:]
             x = np.hstack((x, x_extra[:, 4:]))
+        '''
 
     if do_preprocess:
         x = preprocess(x)
@@ -242,7 +261,8 @@ def load_patients(pats, stratified=False, resolution=1, n_voxels=30000,
     coordtr = np.zeros((0,3))
     patient_idxs_tr = [0]
     dims_tr = []
-    for pat in pats:
+    for i, pat in enumerate(pats):
+        print "Loading patient %d..." % i
         x, y, coord, dim = load_patient(pat, n_voxels=n_voxels,
                                         stratified=stratified,
                                         resolution=resolution,
