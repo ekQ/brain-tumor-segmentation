@@ -14,81 +14,7 @@ import matplotlib.pyplot as plt
 import patient_plotting as pp
 import extras
 import data_processing as dp
-from explore_patient_data import seed
-
-def predict_RF(train_pats, test_pats, fscores=None, do_plot_predictions=False,
-               stratified=False):
-    """
-    Predict tumor voxels for given test patients.
-
-    Input:
-        train_pats -- list of patient IDs used for training a model.
-        test_pats -- list of patient IDs used for testing a model.
-        fscores -- An opened output file to which we write the results.
-    """
-    xtr, ytr, coordtr, patient_idxs_tr, dims_tr = dp.load_patients(train_pats,
-                                                                   stratified)
-
-    if stratified:
-        # Class frequencies in the whole dataset
-        class_freqs = dp.class_counts / float(sum(dp.class_counts))
-        print "Class frequencies:", class_freqs*100
-        # Class frequencies in the sample
-        sample_counts = np.histogram(ytr, range(6))[0]
-        sample_freqs = sample_counts / float(sum(sample_counts))
-        print "Sample frequencies:", sample_freqs*100
-        weights = np.ones(len(ytr))
-        for i in range(5):
-            weights[ytr==i] = class_freqs[i] / sample_freqs[i]
-    else:
-        weights = None
-    model = train_RF_model(xtr, ytr, n_trees=30, sample_weight=weights)
-
-    print "\n----------------------------------\n"
-
-    yte = np.zeros(0)
-    predte = np.zeros(0)
-    patient_idxs_te = [0]
-    print "Test users:"
-    # Iterate over test users
-    for te_idx, te_pat in enumerate(test_pats):
-        print "Test patient number %d" % (te_idx+1)
-        x, y, coord, dim = dp.load_patient(te_pat, n_voxels=None)
-
-        if do_plot_predictions:
-            pif = os.path.join('plots', 'pat%d_slices_0_RF.png' % te_pat)
-        else:
-            pif = None
-        pred = predict_and_evaluate(
-                model, x, y, coord=coord, dim_list=[dim], plot_confmat=False,
-                ret_probs=False, patient_idxs=None,
-                pred_img_fname=pif)
-        #pred = np.argmax(pred_probs_te, axis=1)
-
-        yte = np.concatenate((yte, y))
-        patient_idxs_te.append(len(yte))
-        predte = np.concatenate((predte, pred))
-        '''
-        for i in range(1):
-            xlabel_te = dp.extract_label_features(coordte, dims_te, pred_probs_te,
-                                                  patient_idxs_te)
-            smoothed_pred = np.argmax(xlabel_te, axis=1)
-            dice_scores(yte, smoothed_pred, patient_idxs=patient_idxs_te,
-                        label='Test smoothed dice scores (iteration %d):' % (i+1))
-    
-            xte2 = np.hstack((xte, xlabel_te))
-            pred_probs_te = predict_and_evaluate(
-                    model2, xte2, yte, coord=coordte, dim_list=dims_te, pred_fname=None,
-                    plot_confmat=False, ret_probs=True, patient_idxs=patient_idxs_te,
-                    pred_img_fname=os.path.join('plots', 'pat%d_slices_%d.png' % (test_pats[0], i+1)))
-        '''
-
-    print "\nOverall confusion matrix:"
-    cm = confusion_matrix(yte, predte)
-    print cm
-
-    dice_scores(yte, predte, patient_idxs=patient_idxs_te,
-                label='Overall dice scores (RF):', fscores=fscores)
+from experiments import seed
 
 def predict_two_stage(train_pats, test_pats, fscores=None,
                       do_plot_predictions=False, stratified=False, n_trees=30,
@@ -174,7 +100,8 @@ def predict_two_stage(train_pats, test_pats, fscores=None,
         best_potential = optimize_potential(
                 dev_pats, model1, model2, stratified, fscores,
                 do_plot_predictions, resolution=resolution, load_hog=load_hog)
-        best_radius = 6#optimize_closing(dev_pats, model1, stratified, fscores, resolution=resolution, load_hog=load_hog)
+        best_radius = optimize_closing(dev_pats, model1, stratified, fscores,
+                                       resolution=resolution, load_hog=load_hog)
         best_th = optimize_threshold1(dev_pats, model1, stratified, fscores,
                                       resolution, load_hog, best_radius)
     else:
@@ -490,6 +417,80 @@ def get_min_voxels(y, patient_idxs):
             min_size = tumor_size
     return min_size
 
+def predict_RF(train_pats, test_pats, fscores=None, do_plot_predictions=False,
+               stratified=False):
+    """
+    Predict tumor voxels for given test patients.
+
+    Input:
+        train_pats -- list of patient IDs used for training a model.
+        test_pats -- list of patient IDs used for testing a model.
+        fscores -- An opened output file to which we write the results.
+    """
+    xtr, ytr, coordtr, patient_idxs_tr, dims_tr = dp.load_patients(train_pats,
+                                                                   stratified)
+
+    if stratified:
+        # Class frequencies in the whole dataset
+        class_freqs = dp.class_counts / float(sum(dp.class_counts))
+        print "Class frequencies:", class_freqs*100
+        # Class frequencies in the sample
+        sample_counts = np.histogram(ytr, range(6))[0]
+        sample_freqs = sample_counts / float(sum(sample_counts))
+        print "Sample frequencies:", sample_freqs*100
+        weights = np.ones(len(ytr))
+        for i in range(5):
+            weights[ytr==i] = class_freqs[i] / sample_freqs[i]
+    else:
+        weights = None
+    model = train_RF_model(xtr, ytr, n_trees=30, sample_weight=weights)
+
+    print "\n----------------------------------\n"
+
+    yte = np.zeros(0)
+    predte = np.zeros(0)
+    patient_idxs_te = [0]
+    print "Test users:"
+    # Iterate over test users
+    for te_idx, te_pat in enumerate(test_pats):
+        print "Test patient number %d" % (te_idx+1)
+        x, y, coord, dim = dp.load_patient(te_pat, n_voxels=None)
+
+        if do_plot_predictions:
+            pif = os.path.join('plots', 'pat%d_slices_0_RF.png' % te_pat)
+        else:
+            pif = None
+        pred = predict_and_evaluate(
+                model, x, y, coord=coord, dim_list=[dim], plot_confmat=False,
+                ret_probs=False, patient_idxs=None,
+                pred_img_fname=pif)
+        #pred = np.argmax(pred_probs_te, axis=1)
+
+        yte = np.concatenate((yte, y))
+        patient_idxs_te.append(len(yte))
+        predte = np.concatenate((predte, pred))
+        '''
+        for i in range(1):
+            xlabel_te = dp.extract_label_features(coordte, dims_te, pred_probs_te,
+                                                  patient_idxs_te)
+            smoothed_pred = np.argmax(xlabel_te, axis=1)
+            dice_scores(yte, smoothed_pred, patient_idxs=patient_idxs_te,
+                        label='Test smoothed dice scores (iteration %d):' % (i+1))
+    
+            xte2 = np.hstack((xte, xlabel_te))
+            pred_probs_te = predict_and_evaluate(
+                    model2, xte2, yte, coord=coordte, dim_list=dims_te, pred_fname=None,
+                    plot_confmat=False, ret_probs=True, patient_idxs=patient_idxs_te,
+                    pred_img_fname=os.path.join('plots', 'pat%d_slices_%d.png' % (test_pats[0], i+1)))
+        '''
+
+    print "\nOverall confusion matrix:"
+    cm = confusion_matrix(yte, predte)
+    print cm
+
+    dice_scores(yte, predte, patient_idxs=patient_idxs_te,
+                label='Overall dice scores (RF):', fscores=fscores)
+
 def predict_online(train_pats, test_pats, fscores=None, do_plot_predictions=False,
                    stratified=False):
     """
@@ -573,7 +574,7 @@ def predict_and_evaluate(model, xte, yte=None, coord=None, dim_list=None,
         print "Majority vote:\t%.2f%%" % (bl_acc*100)
 
         dice_scores(yte, pred, patient_idxs=patient_idxs)
-        
+ 
         pp_pred = dp.post_process(coord, dim_list[0], pred, pred_probs)
         dice_scores(yte, pp_pred, patient_idxs=patient_idxs, label='Dice scores (pp):')
 
